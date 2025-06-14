@@ -114,7 +114,7 @@ def save_password(label, password, fernet):
     print(f"Saved password for '{label}'.")
     return True
 
-def get_password(label, fernet):
+def get_password(label, fernet, show=False):
     logging.info(f"Attempting to retrieve password for '{label}'.")
     
     if not os.path.exists(DB_FILE):
@@ -127,7 +127,10 @@ def get_password(label, fernet):
         try:
             decrypted = fernet.decrypt(encrypted.encode()).decode()
             logging.info(f"Password retrieved for '{label}'.")
-            print(f"Password for '{label}': {decrypted}")
+            pyperclip.copy(decrypted)
+            print(f"Password for '{label}' has been copied to the clipboard.")
+            if show:
+                print(f"Password: {decrypted}")
         except:
             logging.warning(f"Failed to decrypt password for '{label}' — possible wrong master password or corrupted data.")
             print("Incorrect master password or data corrupted.")
@@ -157,6 +160,7 @@ def main():
 
     get_parser = subparsers.add_parser('get', help='Get a password by label')
     get_parser.add_argument('label')
+    get_parser.add_argument('--show', action='store_true', help='Show password in terminal')
 
     list_parser = subparsers.add_parser('list', help='List all saved password labels')
 
@@ -171,7 +175,7 @@ def main():
             logging.info(f"Generated new password for '{args.label}' with length {args.length}.")
             print(f"Generated password: {pwd}")
     elif args.command == 'get':
-        get_password(args.label, fernet)
+        get_password(args.label, fernet, show=args.show)
     elif args.command == 'list':
         list_labels()
     else:
