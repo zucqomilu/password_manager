@@ -5,6 +5,7 @@
 #Delete password functionality.
 #Password export/import (per-user).
 #Later, we can add commands like logout, whoami, or implement session timeouts
+#Implement session persistence across commands (e.g. by storing a session token or encrypted key on disk temporarily)
 
 import argparse
 import secrets
@@ -71,6 +72,35 @@ def __create_vault_backup():
     shutil.copy2(DB_FILE, backup_filename)
     logging.info(f"Creating backup for '{backup_filename}' (backup saved as '{backup_filename}').")
     print(f"Created backup: {backup_filename}")
+
+def authenticate_user(username: str, password: str) -> Fernet:
+    if not os.path.exists(USERS_FILE):
+        raise ValueError("No users registered.")
+
+    with open(USERS_FILE, 'r') as f:
+        users = json.load(f)
+
+    if username not in users:
+        raise ValueError("User does not exist.")
+
+    user_data = users[username]
+    salt = base64.b64decode(user_data["salt"])
+    stored_key = user_data["password"]
+
+    # Derive key using input password and salt
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100_000,
+        backend=default_backend()
+    )
+    derived_key = base64.urlsafe_b64encode(kdf.derive(password.encode())).decode()
+
+    if derived_key != stored_key:
+        raise ValueError("Incorrect password.")
+
+    return Fernet(derived_key.encode())
 
 def load_users():
     if os.path.exists(USERS_FILE):
