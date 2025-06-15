@@ -22,6 +22,7 @@ from cryptography.hazmat.backends import default_backend
 DB_FILE = "vault.json"
 SALT_FILE = "salt.bin"
 LOG_FILE = "vault.log"
+USERS_FILE = "users.json"
 
 logging.basicConfig(
     filename=LOG_FILE,
@@ -66,6 +67,54 @@ def __create_vault_backup():
     shutil.copy2(DB_FILE, backup_filename)
     logging.info(f"Creating backup for '{backup_filename}' (backup saved as '{backup_filename}').")
     print(f"Created backup: {backup_filename}")
+
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_users(users):
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=4)
+
+def hash_master_password(password: str, salt: bytes) -> str:
+    key = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100_000,
+        backend=default_backend()
+    ).derive(password.encode())
+    return base64.urlsafe_b64encode(key).decode()
+
+def register_user(username: str, master_password: str) -> bool:
+    users = load_users()
+    if username in users:
+        print(f"User '{username}' already exists.")
+        return False
+    salt = secrets.token_bytes(16)
+    hashed_password = hash_master_password(master_password, salt)
+    users[username] = {
+        "salt": base64.b64encode(salt).decode(),
+        "password": hashed_password
+    }
+    save_users(users)
+    print(f"User '{username}' registered successfully.")
+    return True
+
+def login_user(username: str, master_password: str) -> bool:
+    users = load_users()
+    if username not in users:
+        print(f"User '{username}' not found.")
+        return False
+    salt = base64.b64decode(users[username]["salt"])
+    hashed_input = hash_master_password(master_password, salt)
+    if hashed_input == users[username]["password"]:
+        return True
+    else:
+        print("Incorrect master password.")
+        return False
 
 def generate_password(length=16):
     chars = string.ascii_letters + string.digits + string.punctuation
@@ -166,6 +215,7 @@ def main():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
 
+    # Command options (after login)
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
     gen_parser.add_argument('label', help='Label for the password')
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
@@ -176,20 +226,47 @@ def main():
 
     list_parser = subparsers.add_parser('list', help='List all saved password labels')
 
+    # Parse args first
     args = parser.parse_args()
 
-    master_password = getpass.getpass("Master password: ")
+    if not args.command:
+        parser.print_help()
+        return
+
+    # --- LOGIN / REGISTER flow ---
+    print("Welcome to the Password Manager!")
+    while True:
+        action = input("Do you want to (l)ogin or (r)egister? ").strip().lower()
+        if action not in ('l', 'r'):
+            print("Please type 'l' to login or 'r' to register.")
+            continue
+
+        username = input("Username: ").strip()
+        master_password = getpass.getpass("Master password: ").strip()
+
+        if action == 'r':
+            if register_user(username, master_password):
+                break
+        elif action == 'l':
+            if login_user(username, master_password):
+                break
+        print("Try again.")
+        
+    # Derive Fernet key from the user's master password and salt
+    users = load_users()
+    salt = base64.b64decode(users[username]["salt"])
     fernet = get_fernet(master_password)
 
+    # Command execution (user is now authenticated)
     if args.command == 'generate':
         pwd = generate_password(args.length)
-        if save_password(args.label, pwd, fernet):
+        if save_password(username, args.label, pwd, fernet):
             logging.info(f"Generated new password for '{args.label}' with length {args.length}.")
             print(f"Generated password: {pwd}")
     elif args.command == 'get':
-        get_password(args.label, fernet, show=args.show)
+        get_password(username, args.label, fernet, show=args.show)
     elif args.command == 'list':
-        list_labels(fernet)
+        list_labels(username, fernet)
     else:
         parser.print_help()
 
