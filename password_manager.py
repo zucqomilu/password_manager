@@ -1,6 +1,6 @@
-#Would you like this to be extended with a menu-based UI, SQLite storage, or perhaps clipboard copy support?
-#If you'd like enhancements such as logging, backup creation, or versioning for updated passwords, let me know
+#Would you like this to be extended with a menu-based UI, SQLite storage.
 #TOTP integration Time-Based One Time Password
+#Mask the copied value when displaying it
 
 import argparse
 import secrets
@@ -138,7 +138,7 @@ def get_password(label, fernet, show=False):
         logging.info(f"Label '{label}' not found in vault.")
         print(f"No password found for '{label}'.")
 
-def list_labels():
+def list_labels(fernet):
     logging.info("Listing all stored password labels.")
     
     if not os.path.exists(DB_FILE):
@@ -146,9 +146,21 @@ def list_labels():
         return
     with open(DB_FILE, 'r') as f:
         data = json.load(f)
-    print("Stored labels:")
-    for label in data:
-        print(f"- {label}")
+
+    accessible_labels = []
+    for label, encrypted in data.items():
+        try:
+            fernet.decrypt(encrypted.encode())
+            accessible_labels.append(label)
+        except:
+            pass  # Skip entries that cannot be decrypted
+
+    if accessible_labels:
+        print("Accessible labels with current master password:")
+        for label in accessible_labels:
+            print(f"- {label}")
+    else:
+        print("No accessible passwords found with this master password.")
 
 def main():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
@@ -177,7 +189,7 @@ def main():
     elif args.command == 'get':
         get_password(args.label, fernet, show=args.show)
     elif args.command == 'list':
-        list_labels()
+        list_labels(fernet)
     else:
         parser.print_help()
 
