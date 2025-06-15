@@ -1,6 +1,7 @@
 #Would you like this to be extended with a menu-based UI, SQLite storage.
 #TOTP integration Time-Based One Time Password
 #Mask the copied value when displaying it
+#Let me know if you'd like adding encryption for usernames or labels. Once you're ready, we can proceed to things like optional logout, session tokens, or improved CLI prompts.
 
 import argparse
 import secrets
@@ -120,58 +121,80 @@ def generate_password(length=16):
     chars = string.ascii_letters + string.digits + string.punctuation
     return ''.join(secrets.choice(chars) for _ in range(length))
 
-def save_password(label, password, fernet):
+def save_password(username, label, password, fernet):
     logging.info(f"Attempting to save password for '{label}'.")
 
+    # Load existing data
     data = {}
     if os.path.exists(DB_FILE):
         with open(DB_FILE, 'r') as f:
-            data = json.load(f)
-
-    if label in data:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = {}  # File is empty or invalid JSON
+    
+    # Ensure user exists in vault
+    if username not in data:
+        data[username] = {}
+        
+    user_data = data.get(username, {})
+    
+    if label in user_data:
         try:
-            # Try decrypting to confirm password match
-            old_password = fernet.decrypt(data[label].encode()).decode()
-            # Confirm overwrite
+            # Try to decrypt existing to verify correct master password
+            fernet.decrypt(user_data[label].encode())
+            
             confirm = input(f"A password for '{label}' already exists. Overwrite? (y/N): ").strip().lower()
             if confirm != 'y':
                 logging.info(f"User cancelled overwrite for '{label}'.")
                 print("Operation cancelled.")
                 return False
 
-            # Backup before making changes
-            __create_vault_backup()
             # Versioning: Save old password under label__vN
             version = 1
-            while f"{label}__v{version}" in data:
+            while f"{label}__v{version}" in user_data:
                 version += 1
             versioned_label = f"{label}__v{version}"
-            data[versioned_label] = fernet.encrypt(old_password.encode()).decode()
+            user_data[versioned_label] = fernet.encrypt(old_password.encode()).decode()
             logging.info(f"Overwriting password for '{label}' (backup saved as '{versioned_label}').")
             print(f"Backed up previous password to '{versioned_label}'.")
-    
+
+            # Backup entire vault
+            __create_vault_backup()
+
         except:
             logging.warning(f"Failed to overwrite '{label}' due to incorrect master password.")
             print(f"Error: A password already exists for '{label}', and the provided master password does not match.")
             return False
         
     encrypted = fernet.encrypt(password.encode()).decode()
-    data[label] = encrypted
+    user_data[label] = encrypted
+    data[username] = user_data
+
     with open(DB_FILE, 'w') as f:
         json.dump(data, f, indent=4)
+        
     logging.info(f"Password saved for '{label}'.")
     print(f"Saved password for '{label}'.")
     return True
 
-def get_password(label, fernet, show=False):
+def get_password(username, label, fernet, show=False):
     logging.info(f"Attempting to retrieve password for '{label}'.")
     
     if not os.path.exists(DB_FILE):
         print("No passwords saved yet.")
         return
+
     with open(DB_FILE, 'r') as f:
-        data = json.load(f)
-    encrypted = data.get(label)
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print("Vault is corrupted or empty.")
+            return
+        
+    user_data = data.get(username, {})
+    encrypted = user_data.get(label)
+    
     if encrypted:
         try:
             decrypted = fernet.decrypt(encrypted.encode()).decode()
@@ -187,30 +210,34 @@ def get_password(label, fernet, show=False):
         logging.info(f"Label '{label}' not found in vault.")
         print(f"No password found for '{label}'.")
 
-def list_labels(fernet):
+def list_labels(username, fernet):
     logging.info("Listing all stored password labels.")
     
     if not os.path.exists(DB_FILE):
         print("No passwords saved yet.")
         return
+
     with open(DB_FILE, 'r') as f:
-        data = json.load(f)
-
-    accessible_labels = []
-    for label, encrypted in data.items():
         try:
-            fernet.decrypt(encrypted.encode())
-            accessible_labels.append(label)
-        except:
-            pass  # Skip entries that cannot be decrypted
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print("Vault is corrupted or empty.")
+            return
 
-    if accessible_labels:
-        print("Accessible labels with current master password:")
-        for label in accessible_labels:
+
+    user_data = data.get(username, {})
+    if not user_data:
+        print("No passwords found for this user.")
+        return
+
+    print("Stored labels:")
+    for label in user_data:
+        try:
+            fernet.decrypt(user_data[label].encode())  # Validate decryption
             print(f"- {label}")
-    else:
-        print("No accessible passwords found with this master password.")
-
+        except:
+            continue  # Skip labels that can't be decrypted with this password
+        
 def main():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
