@@ -6,6 +6,7 @@
 #Password export/import (per-user).
 #Later, we can add commands like logout, whoami, or implement session timeouts
 #Implement session persistence across commands (e.g. by storing a session token or encrypted key on disk temporarily)
+#Let me know if you'd like to also make the session more robust by including automatic logout, session expiration, or per-user session files.
 
 import argparse
 import secrets
@@ -17,6 +18,7 @@ import getpass
 import shutil
 import logging
 import pyperclip
+import tempfile
 
 from datetime import datetime
 from cryptography.fernet import Fernet
@@ -28,6 +30,7 @@ DB_FILE = "vault.json"
 SALT_FILE = "salt.bin"
 LOG_FILE = "vault.log"
 USERS_FILE = "users.json"
+SESSION_FILE = os.path.join(tempfile.gettempdir(), "password_manager_session.json")
 
 logging.basicConfig(
     filename=LOG_FILE,
@@ -49,6 +52,13 @@ def load_salt():
             salt = f.read()
     return salt
 
+def load_user_salt(username):
+    users = load_users()
+    if username in users:
+        return base64.b64decode(users[username]['salt'])
+    else:
+        raise ValueError(f"User '{username}' not found.")
+
 def get_key_from_password(password: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -58,6 +68,32 @@ def get_key_from_password(password: str, salt: bytes) -> bytes:
         backend=default_backend()
     )
     return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+
+def save_session(username: str, key: bytes):
+    session_data = {
+        "username": username,
+        "key": base64.urlsafe_b64encode(key).decode()
+    }
+    with open(SESSION_FILE, "w") as f:
+        json.dump(session_data, f)
+
+def load_session():
+    if not os.path.exists(SESSION_FILE):
+        return None, None
+    try:
+        with open(SESSION_FILE, "r") as f:
+            session_data = json.load(f)
+        username = session_data.get("username")
+        key = base64.urlsafe_b64decode(session_data.get("key").encode())
+        return username, Fernet(key)
+    except Exception as e:
+        print("Invalid or expired session. Please log in again.")
+        return None, None
+
+def clear_session():
+    if os.path.exists(SESSION_FILE):
+        os.remove(SESSION_FILE)
+        print("Session cleared.")
 
 def get_fernet(master_password):
     salt = load_salt()
@@ -276,7 +312,8 @@ def main():
 
     # Add command parsers
     subparsers.add_parser('register', help='Register a new user')
-    subparsers.add_parser('login', help='Login as an existing user')
+    parser_login = subparsers.add_parser('login', help='Login as an existing user')
+    parser_logout = subparsers.add_parser('logout', help='Log out and clear session')
 
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
     gen_parser.add_argument('label', help='Label for the password')
@@ -300,40 +337,40 @@ def main():
         return
 
     # Handle user login (if invoked directly)
-    if args.command == 'login':
-        username = input("Username: ").strip()
+    if args.command == 'login' or args.command == '':
+        username = input("Username: ")
         password = getpass.getpass("Master password: ")
         try:
             fernet = authenticate_user(username, password)
+            salt = load_user_salt(username)  # if needed
+            key = get_key_from_password(password, salt)
+            save_session(username, key)
             print(f"Login successful. Welcome, {username}!")
         except ValueError as e:
             print(str(e))
         return
 
-    # For all other commands, start session
-    print("🔐 Please log in to start your session.")
-    username = input("Username: ").strip()
-    password = getpass.getpass("Master password: ")
+    elif args.command == "logout":
+        clear_session()
+        return
 
-    try:
-        fernet = authenticate_user(username, password)
-        print(f"Welcome, {username}!")
-        
-        # Secure session dispatch
-        if args.command == 'generate':
-            pwd = generate_password(args.length)
-            if save_password(username, args.label, pwd, fernet):
-                logging.info(f"Generated new password for '{args.label}' with length {args.length}.")
-                print(f"Generated password: {pwd}")
-        elif args.command == 'get':
-            get_password(username, args.label, fernet, show=args.show)
-        elif args.command == 'list':
-            list_labels(username, fernet)
-        else:
-            parser.print_help()
+    # Try loading session
+    username, fernet = load_session()
+    if not username or not fernet:
+        print("You are not logged in. Please run `login` first.")
+        return
 
-    except ValueError as e:
-        print(f"Login failed: {e}")
+    if args.command == 'generate':
+        pwd = generate_password(args.length)
+        if save_password(username, args.label, pwd, fernet):
+            logging.info(f"Generated new password for '{args.label}' with length {args.length}.")
+            print(f"Generated password: {pwd}")
+    elif args.command == 'get':
+        get_password(username, args.label, fernet, show=args.show)
+    elif args.command == 'list':
+        list_labels(username, fernet)
+    else:
+        parser.print_help()
 
 if __name__ == '__main__':
     main()
