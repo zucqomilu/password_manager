@@ -3,3 +3,4 @@ vault.json
 vault.log
 salt.bin
 vault_backup*.json
+users.json
