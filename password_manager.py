@@ -4,6 +4,7 @@
 #Let me know if you'd like adding encryption for usernames or labels. Once you're ready, we can proceed to things like optional logout, session tokens, or improved CLI prompts.
 #Delete password functionality.
 #Password export/import (per-user).
+#Later, we can add commands like logout, whoami, or implement session timeouts
 
 import argparse
 import secrets
@@ -243,7 +244,10 @@ def main():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
 
-    # Command options (after login)
+    # Add command parsers
+    subparsers.add_parser('register', help='Register a new user')
+    subparsers.add_parser('login', help='Login as an existing user')
+
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
     gen_parser.add_argument('label', help='Label for the password')
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
@@ -257,46 +261,49 @@ def main():
     # Parse args first
     args = parser.parse_args()
 
-    if not args.command:
-        parser.print_help()
+    # Handle user registration
+    if args.command == 'register':
+        username = input("Choose a username: ").strip()
+        password = getpass.getpass("Choose a master password: ")
+        if register_user(username, password):
+            print("Registration successful.")
         return
 
-    # --- LOGIN / REGISTER flow ---
-    print("Welcome to the Password Manager!")
-    while True:
-        action = input("Do you want to (l)ogin or (r)egister? ").strip().lower()
-        if action not in ('l', 'r'):
-            print("Please type 'l' to login or 'r' to register.")
-            continue
-
+    # Handle user login (if invoked directly)
+    if args.command == 'login':
         username = input("Username: ").strip()
-        master_password = getpass.getpass("Master password: ").strip()
+        password = getpass.getpass("Master password: ")
+        try:
+            fernet = authenticate_user(username, password)
+            print(f"Login successful. Welcome, {username}!")
+        except ValueError as e:
+            print(str(e))
+        return
 
-        if action == 'r':
-            if register_user(username, master_password):
-                break
-        elif action == 'l':
-            if login_user(username, master_password):
-                break
-        print("Try again.")
+    # For all other commands, start session
+    print("🔐 Please log in to start your session.")
+    username = input("Username: ").strip()
+    password = getpass.getpass("Master password: ")
+
+    try:
+        fernet = authenticate_user(username, password)
+        print(f"Welcome, {username}!")
         
-    # Derive Fernet key from the user's master password and salt
-    users = load_users()
-    salt = base64.b64decode(users[username]["salt"])
-    fernet = get_fernet(master_password)
+        # Secure session dispatch
+        if args.command == 'generate':
+            pwd = generate_password(args.length)
+            if save_password(username, args.label, pwd, fernet):
+                logging.info(f"Generated new password for '{args.label}' with length {args.length}.")
+                print(f"Generated password: {pwd}")
+        elif args.command == 'get':
+            get_password(username, args.label, fernet, show=args.show)
+        elif args.command == 'list':
+            list_labels(username, fernet)
+        else:
+            parser.print_help()
 
-    # Command execution (user is now authenticated)
-    if args.command == 'generate':
-        pwd = generate_password(args.length)
-        if save_password(username, args.label, pwd, fernet):
-            logging.info(f"Generated new password for '{args.label}' with length {args.length}.")
-            print(f"Generated password: {pwd}")
-    elif args.command == 'get':
-        get_password(username, args.label, fernet, show=args.show)
-    elif args.command == 'list':
-        list_labels(username, fernet)
-    else:
-        parser.print_help()
+    except ValueError as e:
+        print(f"Login failed: {e}")
 
 if __name__ == '__main__':
     main()
