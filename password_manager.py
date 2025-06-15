@@ -2,6 +2,8 @@
 #TOTP integration Time-Based One Time Password
 #Mask the copied value when displaying it
 #Let me know if you'd like adding encryption for usernames or labels. Once you're ready, we can proceed to things like optional logout, session tokens, or improved CLI prompts.
+#Delete password functionality.
+#Password export/import (per-user).
 
 import argparse
 import secrets
@@ -223,7 +225,6 @@ def list_labels(username, fernet):
         except json.JSONDecodeError:
             print("Vault is corrupted or empty.")
             return
-
 
     user_data = data.get(username, {})
     if not user_data:
