@@ -184,7 +184,6 @@ def save_password(username, label, password, fernet):
         data[username] = {}
         
     user_data = data.get(username, {})
-    
     if label in user_data:
         confirm = input(f"A password for '{label}' already exists. Overwrite? (y/N): ").strip().lower()
         if confirm != 'y':
@@ -195,13 +194,12 @@ def save_password(username, label, password, fernet):
         try:
             # Try to decrypt existing to verify correct master password
             old_password = fernet.decrypt(user_data[label].encode())
-
             # Versioning: Save old password under label__vN
             version = 1
             while f"{label}__v{version}" in user_data:
                 version += 1
             versioned_label = f"{label}__v{version}"
-            user_data[versioned_label] = fernet.encrypt(old_password.encode()).decode()
+            user_data[versioned_label] = fernet.encrypt(old_password).decode()
             logging.info(f"Overwriting password for '{label}' (backup saved as '{versioned_label}').")
             print(f"Backed up previous password to '{versioned_label}'.")
 
