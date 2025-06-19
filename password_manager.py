@@ -7,6 +7,7 @@
 #Later, we can add commands like logout, whoami, or implement session timeouts
 #Implement session persistence across commands (e.g. by storing a session token or encrypted key on disk temporarily)
 #Let me know if you'd like to also make the session more robust by including automatic logout, session expiration, or per-user session files.
+#you should encrypt the session file, or store the session key only in memory (e.g., via an agent), or use OS-level secure storage (e.g., keyrings, credential manager)
 
 import argparse
 import secrets
@@ -30,7 +31,7 @@ DB_FILE = "vault.json"
 SALT_FILE = "salt.bin"
 LOG_FILE = "vault.log"
 USERS_FILE = "users.json"
-SESSION_FILE = os.path.join(tempfile.gettempdir(), "password_manager_session.json")
+SESSION_FILE = os.path.join(tempfile.gettempdir(), "session.json")
 
 logging.basicConfig(
     filename=LOG_FILE,
@@ -59,46 +60,33 @@ def load_user_salt(username):
     else:
         raise ValueError(f"User '{username}' not found.")
 
-def get_key_from_password(password: str, salt: bytes) -> bytes:
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100_000,
-        backend=default_backend()
-    )
-    return base64.urlsafe_b64encode(kdf.derive(password.encode()))
-
 def save_session(username: str, key: bytes):
     session_data = {
         "username": username,
-        "key": base64.urlsafe_b64encode(key).decode()
+        "fernet_key": base64.urlsafe_b64encode(key).decode()
     }
+    
     with open(SESSION_FILE, "w") as f:
         json.dump(session_data, f)
 
-def load_session():
+def load_session() -> tuple[str, Fernet] | None:
     if not os.path.exists(SESSION_FILE):
-        return None, None
-    try:
-        with open(SESSION_FILE, "r") as f:
+        return None
+
+    with open(SESSION_FILE, "r") as f:
+        try:
             session_data = json.load(f)
-        username = session_data.get("username")
-        key = base64.urlsafe_b64decode(session_data.get("key").encode())
-        return username, Fernet(key)
-    except Exception as e:
-        print("Invalid or expired session. Please log in again.")
-        return None, None
+            username = session_data["username"]
+            key = base64.urlsafe_b64decode(session_data["fernet_key"])
+            return username, Fernet(key)
+        except Exception as e:
+            print(f"Error loading session: {e}")
+            return None
 
 def clear_session():
     if os.path.exists(SESSION_FILE):
         os.remove(SESSION_FILE)
         print("Session cleared.")
-
-def get_fernet(master_password):
-    salt = load_salt()
-    key = get_key_from_password(master_password, salt)
-    return Fernet(key)
 
 def __create_vault_backup():
     if not os.path.exists(DB_FILE):
@@ -109,7 +97,7 @@ def __create_vault_backup():
     logging.info(f"Creating backup for '{backup_filename}' (backup saved as '{backup_filename}').")
     print(f"Created backup: {backup_filename}")
 
-def authenticate_user(username: str, password: str) -> Fernet:
+def authenticate_user(username: str, password: str) -> bytes:
     if not os.path.exists(USERS_FILE):
         raise ValueError("No users registered.")
 
@@ -120,23 +108,18 @@ def authenticate_user(username: str, password: str) -> Fernet:
         raise ValueError("User does not exist.")
 
     user_data = users[username]
-    salt = base64.b64decode(user_data["salt"])
+    auth_salt = base64.b64decode(user_data["auth_salt"])
+    enc_salt = base64.b64decode(user_data["enc_salt"])
+    
     stored_key = user_data["password"]
+    derived_auth_key = derive_key(password, auth_salt).decode()
 
-    # Derive key using input password and salt
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100_000,
-        backend=default_backend()
-    )
-    derived_key = base64.urlsafe_b64encode(kdf.derive(password.encode())).decode()
-
-    if derived_key != stored_key:
+    if derived_auth_key != stored_key:
         raise ValueError("Incorrect password.")
 
-    return Fernet(derived_key.encode())
+    # Use a different key for Fernet encryption
+    fernet_key = derive_key(password + ":fernet", enc_salt)
+    return fernet_key
 
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -148,27 +131,34 @@ def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f, indent=4)
 
-def hash_master_password(password: str, salt: bytes) -> str:
-    key = PBKDF2HMAC(
+def derive_key(password: str, salt: bytes) -> bytes:
+    """Derive a 32-byte key from the password and salt."""
+    kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
         iterations=100_000,
         backend=default_backend()
-    ).derive(password.encode())
-    return base64.urlsafe_b64encode(key).decode()
+    )
+    return base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
 def register_user(username: str, master_password: str) -> bool:
     users = load_users()
     if username in users:
         print(f"User '{username}' already exists.")
         return False
-    salt = secrets.token_bytes(16)
-    hashed_password = hash_master_password(master_password, salt)
+
+    auth_salt = secrets.token_bytes(16)
+    enc_salt = secrets.token_bytes(16)
+
+    # Key for authentication
+    auth_key = derive_key(master_password, auth_salt)
     users[username] = {
-        "salt": base64.b64encode(salt).decode(),
-        "password": hashed_password
+        "auth_salt": base64.b64encode(auth_salt).decode(),
+        "enc_salt": base64.b64encode(enc_salt).decode(),
+        "password": auth_key.decode()
     }
+    
     save_users(users)
     print(f"User '{username}' registered successfully.")
     return True
@@ -178,8 +168,10 @@ def login_user(username: str, master_password: str) -> bool:
     if username not in users:
         print(f"User '{username}' not found.")
         return False
-    salt = base64.b64decode(users[username]["salt"])
-    hashed_input = hash_master_password(master_password, salt)
+
+    auth_salt = base64.b64decode(users[username]["auth_salt"])
+    hashed_input = derive_key(master_password, auth_salt)
+
     if hashed_input == users[username]["password"]:
         return True
     else:
@@ -328,7 +320,7 @@ def main():
     # Parse args first
     args = parser.parse_args()
 
-    # Handle user registration
+    # === REGISTER USER ===
     if args.command == 'register':
         username = input("Choose a username: ").strip()
         password = getpass.getpass("Choose a master password: ")
@@ -336,30 +328,31 @@ def main():
             print("Registration successful.")
         return
 
-    # Handle user login (if invoked directly)
-    if args.command == 'login' or args.command == '':
-        username = input("Username: ")
+    # === LOGIN USER ===
+    if args.command == 'login' or args.command is None:
+        username = input("Username: ").strip()
         password = getpass.getpass("Master password: ")
         try:
-            fernet = authenticate_user(username, password)
-            salt = load_user_salt(username)  # if needed
-            key = get_key_from_password(password, salt)
-            save_session(username, key)
+            # Authenticate and get Fernet instance (for session storage)
+            fernet_key = authenticate_user(username, password)
+            save_session(username, fernet_key)
             print(f"Login successful. Welcome, {username}!")
         except ValueError as e:
-            print(str(e))
+            print(f"Login failed: {e}")
         return
 
-    elif args.command == "logout":
+    # === LOGOUT USER ===
+    if args.command == "logout":
         clear_session()
         return
 
-    # Try loading session
+    # === LOAD SESSION ===
     username, fernet = load_session()
     if not username or not fernet:
         print("You are not logged in. Please run `login` first.")
         return
 
+    # === HANDLE USER COMMANDS ===
     if args.command == 'generate':
         pwd = generate_password(args.length)
         if save_password(username, args.label, pwd, fernet):
