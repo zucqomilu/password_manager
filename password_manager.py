@@ -65,7 +65,7 @@ def save_session(username: str, key: bytes):
         "username": username,
         "fernet_key": base64.urlsafe_b64encode(key).decode()
     }
-    
+
     with open(SESSION_FILE, "w") as f:
         json.dump(session_data, f)
 
@@ -163,21 +163,6 @@ def register_user(username: str, master_password: str) -> bool:
     print(f"User '{username}' registered successfully.")
     return True
 
-def login_user(username: str, master_password: str) -> bool:
-    users = load_users()
-    if username not in users:
-        print(f"User '{username}' not found.")
-        return False
-
-    auth_salt = base64.b64decode(users[username]["auth_salt"])
-    hashed_input = derive_key(master_password, auth_salt)
-
-    if hashed_input == users[username]["password"]:
-        return True
-    else:
-        print("Incorrect master password.")
-        return False
-
 def generate_password(length=16):
     chars = string.ascii_letters + string.digits + string.punctuation
     return ''.join(secrets.choice(chars) for _ in range(length))
@@ -201,15 +186,15 @@ def save_password(username, label, password, fernet):
     user_data = data.get(username, {})
     
     if label in user_data:
+        confirm = input(f"A password for '{label}' already exists. Overwrite? (y/N): ").strip().lower()
+        if confirm != 'y':
+            logging.info(f"User cancelled overwrite for '{label}'.")
+            print("Operation cancelled.")
+            return False
+
         try:
             # Try to decrypt existing to verify correct master password
-            fernet.decrypt(user_data[label].encode())
-            
-            confirm = input(f"A password for '{label}' already exists. Overwrite? (y/N): ").strip().lower()
-            if confirm != 'y':
-                logging.info(f"User cancelled overwrite for '{label}'.")
-                print("Operation cancelled.")
-                return False
+            old_password = fernet.decrypt(user_data[label].encode())
 
             # Versioning: Save old password under label__vN
             version = 1
@@ -339,7 +324,7 @@ def main():
             print(f"Login successful. Welcome, {username}!")
         except ValueError as e:
             print(f"Login failed: {e}")
-        return
+            return
 
     # === LOGOUT USER ===
     if args.command == "logout":
