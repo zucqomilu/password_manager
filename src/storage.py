@@ -1,37 +1,40 @@
 import os
-import secrets
+import json
 import shutil
-import logging
 from datetime import datetime
+from .logger import logger
 
-SALT_FILE = "salt.bin"
+DB_FILE = "vault.json"
+USERS_FILE = "users.json"
 
-def __create_vault_backup():
+def load_data():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, 'r') as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+def save_data(data):
+    with open(DB_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_users(users):
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=4)
+
+def backup_vault():
     if not os.path.exists(DB_FILE):
         return
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"vault_backup_{timestamp}.json"
     shutil.copy2(DB_FILE, backup_filename)
-    logging.info(f"Creating backup for '{backup_filename}' (backup saved as '{backup_filename}').")
+    logger.info(f"Creating backup for '{backup_filename}' (backup saved as '{backup_filename}').")
     print(f"Created backup: {backup_filename}")
-
-
-def generate_salt():
-    return secrets.token_bytes(16)
-
-def load_salt():
-    if not os.path.exists(SALT_FILE):
-        salt = generate_salt()
-        with open(SALT_FILE, 'wb') as f:
-            f.write(salt)
-    else:
-        with open(SALT_FILE, 'rb') as f:
-            salt = f.read()
-    return salt
-
-def load_user_salt(username):
-    users = load_users()
-    if username in users:
-        return base64.b64decode(users[username]['salt'])
-    else:
-        raise ValueError(f"User '{username}' not found.")
