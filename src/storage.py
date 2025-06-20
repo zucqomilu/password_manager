@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import shutil
 from datetime import datetime
 from .logger import logger
@@ -29,6 +30,13 @@ def load_users():
 def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f, indent=4)
+
+def load_user_salt(username):
+    users = load_users()
+    if username in users:
+        return base64.b64decode(users[username]['salt'])
+    else:
+        raise ValueError(f"User '{username}' not found.")
 
 def backup_vault():
     if not os.path.exists(DB_FILE):

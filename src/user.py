@@ -1,9 +1,8 @@
 import os
 import json
 import base64
-import secrets
-from crypto import derive_key
-from storage import save_users, load_users
+from .crypto import derive_key, generate_salt
+from .storage import save_users, load_users
 from .logger import logger
 from .constants import USERS_FILE
 
@@ -14,8 +13,8 @@ def register_user(username: str, master_password: str) -> bool:
         logger.warning(f"User '{username}' already exists.")
         return False
 
-    auth_salt = secrets.token_bytes(16)
-    enc_salt = secrets.token_bytes(16)
+    auth_salt = generate_salt()
+    enc_salt = generate_salt()
 
     # Key for authentication
     auth_key = derive_key(master_password, auth_salt)
