@@ -1,6 +1,5 @@
 import logging
-
-LOG_FILE = "vault.log"
+from .constants import LOG_FILE
 
 logging.basicConfig(
     filename=LOG_FILE,

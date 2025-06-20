@@ -5,8 +5,7 @@ import json
 import pyperclip
 from .logger import logger
 from .storage import backup_vault
-
-DB_FILE = "vault.json"
+from .constants import DB_FILE
 
 def generate_password(length=16):
     chars = string.ascii_letters + string.digits + string.punctuation

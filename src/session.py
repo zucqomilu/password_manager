@@ -1,11 +1,9 @@
 import os
 import json
 import base64
-import tempfile
 from cryptography.fernet import Fernet
 from .logger import logger
-
-SESSION_FILE = os.path.join(tempfile.gettempdir(), "session.json")
+from .constants import SESSION_FILE
 
 def save_session(username: str, key: bytes):
     session_data = {

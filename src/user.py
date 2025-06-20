@@ -5,8 +5,7 @@ import secrets
 from crypto import derive_key
 from storage import save_users, load_users
 from .logger import logger
-
-USERS_FILE = "users.json"
+from .constants import USERS_FILE
 
 def register_user(username: str, master_password: str) -> bool:
     users = load_users()
