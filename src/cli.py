@@ -1,31 +1,10 @@
-#Would you like this to be extended with a menu-based UI, SQLite storage.
-#TOTP integration Time-Based One Time Password
-#Mask the copied value when displaying it
-#Let me know if you'd like adding encryption for usernames or labels. Once you're ready, we can proceed to things like optional logout, session tokens, or improved CLI prompts.
-#Delete password functionality.
-#Password export/import (per-user).
-#Later, we can add commands like logout, whoami, or implement session timeouts
-#Implement session persistence across commands (e.g. by storing a session token or encrypted key on disk temporarily)
-#Let me know if you'd like to also make the session more robust by including automatic logout, session expiration, or per-user session files.
-#you should encrypt the session file, or store the session key only in memory (e.g., via an agent), or use OS-level secure storage (e.g., keyrings, credential manager)
-
-import argparse
-import secrets
-import json
-import os
-import getpass
-import shutil
 import logging
+import argparse
+import getpass
+from core import save_password, get_password, list_labels, generate_password
+from user import register_user, authenticate_user
+from session import load_session, save_session, clear_session
 
-LOG_FILE = "vault.log"
-
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-        
 def main():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
@@ -92,6 +71,3 @@ def main():
         list_labels(username, fernet)
     else:
         parser.print_help()
-
-if __name__ == '__main__':
-    main()

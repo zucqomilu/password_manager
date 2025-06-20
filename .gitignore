@@ -5,3 +5,4 @@ salt.bin
 vault_backup*.json
 users.json
 test.py
+*.el
