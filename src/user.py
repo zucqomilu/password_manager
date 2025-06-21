@@ -30,13 +30,7 @@ def register_user(username: str, master_password: str) -> bool:
     return True
 
 def authenticate_user(username: str, password: str) -> bytes:
-    if not os.path.exists(USERS_FILE):
-        logger.error("No users registered.")
-        raise ValueError("No users registered.")
-
-    with open(USERS_FILE, 'r') as f:
-        users = json.load(f)
-
+    users = load_users()
     if username not in users:
         logger.error("User does not exist.")
         raise ValueError("User does not exist.")
