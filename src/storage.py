@@ -23,7 +23,10 @@ def save_vault(data):
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'r') as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
     return {}
 
 def save_users(users):
@@ -32,7 +35,7 @@ def save_users(users):
 
 def backup_vault():
     if not os.path.exists(DB_FILE):
-        return
+        return None
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"vault_backup_{timestamp}.json"
     shutil.copy2(DB_FILE, backup_filename)

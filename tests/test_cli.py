@@ -24,6 +24,16 @@ def test_login_success():
         mock_authenticate_user.assert_called_once_with('testuser', 'testpass')
         mock_save_session.assert_called_once()
 
+def test_login_failure(capsys):
+    with patch.object(sys, "argv", ["prog", "login"]), \
+         patch("builtins.input", return_value="testuser"), \
+         patch("getpass.getpass", return_value="wrongpassword"), \
+         patch('src.user.authenticate_user', side_effect=ValueError("Login failed: User does not exist.")):
+        cli.main()
+
+    captured = capsys.readouterr()
+    assert "Login failed: User does not exist." in captured.out
+    
 def test_logout():
     with patch('src.cli.clear_session') as mock_clear_session:
         run_cli_with_args(['prog', 'logout'])

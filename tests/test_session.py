@@ -36,6 +36,15 @@ def test_load_session_returns_none_if_file_missing():
     with patch("os.path.exists", return_value=False):
         assert load_session() is None
 
+def test_load_session_failure_json_error():
+    mock_file = mock_open(read_data='{"username": "testuser", "fernet_key": "invalid=="')
+    with patch("os.path.exists", return_value=True), \
+         patch("builtins.open", mock_file), \
+         patch("json.load", side_effect=ValueError("Invalid JSON")):
+        
+        result = load_session()
+        assert result is None
+        
 def test_clear_session_removes_file():
     with patch("os.path.exists", return_value=True), \
          patch("os.remove") as mock_remove:
