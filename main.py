@@ -8,6 +8,7 @@
 #Implement session persistence across commands (e.g. by storing a session token or encrypted key on disk temporarily)
 #Let me know if you'd like to also make the session more robust by including automatic logout, session expiration, or per-user session files.
 #you should encrypt the session file, or store the session key only in memory (e.g., via an agent), or use OS-level secure storage (e.g., keyrings, credential manager)
+#Modify main.py and/or cli.py to support file path overrides via environment variables for isolation?
 from src.cli import main
 
 if __name__ == '__main__':

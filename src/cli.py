@@ -9,34 +9,46 @@ def main():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
 
-    subparsers.add_parser('register', help='Register a new user')
-    subparsers.add_parser('login', help='Login as an existing user')
+    # === REGISTER ===
+    register_parser = subparsers.add_parser('register', help='Register a new user')
+    register_parser.add_argument('--username', help='Username for registration')
+    register_parser.add_argument('--password', help='Master password (optional for scripting)')
+
+    # === LOGIN ===
+    login_parser = subparsers.add_parser('login', help='Login as an existing user')
+    login_parser.add_argument('--username', help='Username for login')
+    login_parser.add_argument('--password', help='Master password (optional for scripting)')
+
+    # === LOGOUT ===
     subparsers.add_parser('logout', help='Log out and clear session')
 
+    # === GENERATE ===
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
     gen_parser.add_argument('label', help='Label for the password')
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
 
+    # === GET ===
     get_parser = subparsers.add_parser('get', help='Get a password by label')
     get_parser.add_argument('label')
     get_parser.add_argument('--show', action='store_true', help='Show password in terminal')
 
+    # === LIST ===
     subparsers.add_parser('list', help='List all saved password labels')
 
     args = parser.parse_args()
 
     # === REGISTER USER ===
     if args.command == 'register':
-        username = input("Choose a username: ").strip()
-        password = getpass.getpass("Choose a master password: ")
+        username = args.username or input("Choose a username: ").strip()
+        password = args.password or getpass.getpass("Choose a master password: ")
         if register_user(username, password):
             print("Registration successful.")
         return
 
     # === LOGIN USER ===
     if args.command == 'login' or args.command is None:
-        username = input("Username: ").strip()
-        password = getpass.getpass("Master password: ")
+        username = args.username or input("Username: ").strip()
+        password = args.password or getpass.getpass("Master password: ")
         try:
             fernet_key = authenticate_user(username, password)
             save_session(username, fernet_key)

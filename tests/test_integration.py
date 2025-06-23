@@ -1,8 +1,8 @@
 # tests/test_integration.py
-import src.storage
 import json
 import pytest
 import shutil
+import src.constants
 from src.user import register_user, authenticate_user
 from src.core import save_password, get_password
 from src.session import save_session, load_session
@@ -15,15 +15,16 @@ def isolate_files(monkeypatch, tmp_path):
     users = tmp_path / "users.json"
     session = tmp_path / "session.json"
 
-    monkeypatch.setattr("src.storage.DB_FILE", str(vault))
-    monkeypatch.setattr("src.storage.USERS_FILE", str(users))
-    monkeypatch.setattr("src.session.SESSION_FILE", str(session))
+    monkeypatch.setattr(src.constants, "get_db_file", lambda: str(vault))
+    monkeypatch.setattr(src.constants, "get_users_file", lambda: str(users))
+    monkeypatch.setattr(src.constants, "get_session_file", lambda: str(session))
+    print("Mocked DB file path:", src.constants.get_db_file())
 
     def patched_backup_vault():
         print("Inside patched backup vault!")
         from datetime import datetime
         backup_filename = tmp_path / f"vault_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        shutil.copy2(src.storage.DB_FILE, backup_filename)
+        shutil.copy2(vault, backup_filename)
         print(f"Created backup: {backup_filename}")
     monkeypatch.setattr("src.core.backup_vault", patched_backup_vault)
 

@@ -1,8 +1,9 @@
 import json
 import base64
+import src.constants
 from unittest.mock import mock_open, patch
 from cryptography.fernet import Fernet
-from src.session import save_session, load_session, clear_session, SESSION_FILE
+from src.session import save_session, load_session, clear_session
 
 def test_save_session_writes_correct_json():
     username = "testuser"
@@ -49,7 +50,7 @@ def test_clear_session_removes_file():
     with patch("os.path.exists", return_value=True), \
          patch("os.remove") as mock_remove:
         clear_session()
-        mock_remove.assert_called_once_with(SESSION_FILE)
+        mock_remove.assert_called_once_with(src.constants.get_session_file())
 
 def test_clear_session_does_nothing_if_no_file():
     with patch("os.path.exists", return_value=False), \

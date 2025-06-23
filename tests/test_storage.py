@@ -60,10 +60,9 @@ def test_save_users_writes_json():
         written = ''.join(call.args[0] for call in handle.write.call_args_list)
         assert json.loads(written) == users
 
-def test_backup_vault_creates_backup(tmp_path):
-    test_file = tmp_path / "vault.json"
-    test_file.write_text('{"sample": "data"}')
-    with patch("src.storage.DB_FILE", str(test_file)), \
+def test_backup_vault_creates_backup():
+    with patch("src.constants.get_db_file", return_value="/fake/dir/vault.json"), \
+         patch("os.path.exists", return_value=True), \
          patch("shutil.copy2") as mock_copy, \
          patch("src.storage.logger") as mock_logger:
         backup_vault()
