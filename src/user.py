@@ -1,10 +1,7 @@
-import os
-import json
 import base64
 from .crypto import derive_key, generate_salt
 from .storage import save_users, load_users
 from .logger import logger
-from .constants import USERS_FILE
 
 def register_user(username: str, master_password: str) -> bool:
     users = load_users()
