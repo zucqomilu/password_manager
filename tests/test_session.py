@@ -50,7 +50,7 @@ def test_clear_session_removes_file():
     with patch("os.path.exists", return_value=True), \
          patch("os.remove") as mock_remove:
         clear_session()
-        mock_remove.assert_called_once_with(src.constants.get_session_file())
+        mock_remove.assert_called_once_with(src.constants.get_session())
 
 def test_clear_session_does_nothing_if_no_file():
     with patch("os.path.exists", return_value=False), \

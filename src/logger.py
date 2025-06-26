@@ -1,8 +1,8 @@
 import logging
-from .constants import get_log_file
+from .constants import get_log
 
 logging.basicConfig(
-    filename=get_log_file(),
+    filename=get_log(),
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"

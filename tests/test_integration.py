@@ -15,10 +15,10 @@ def isolate_files(monkeypatch, tmp_path):
     users = tmp_path / "users.json"
     session = tmp_path / "session.json"
 
-    monkeypatch.setattr(src.constants, "get_db_file", lambda: str(vault))
-    monkeypatch.setattr(src.constants, "get_users_file", lambda: str(users))
-    monkeypatch.setattr(src.constants, "get_session_file", lambda: str(session))
-    print("Mocked DB file path:", src.constants.get_db_file())
+    monkeypatch.setattr(src.constants, "get_vault", lambda: str(vault))
+    monkeypatch.setattr(src.constants, "get_users", lambda: str(users))
+    monkeypatch.setattr(src.constants, "get_session", lambda: str(session))
+    print("Mocked DB file path:", src.constants.get_vault())
 
     def patched_backup_vault():
         print("Inside patched backup vault!")

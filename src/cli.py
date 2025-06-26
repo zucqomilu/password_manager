@@ -5,7 +5,7 @@ from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password
 from .session import load_session, save_session, clear_session
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
 
@@ -35,7 +35,7 @@ def main():
     # === LIST ===
     subparsers.add_parser('list', help='List all saved password labels')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # === REGISTER USER ===
     if args.command == 'register':

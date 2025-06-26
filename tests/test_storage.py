@@ -1,4 +1,4 @@
-import json
+import json, base64
 from unittest.mock import patch, mock_open
 from src.storage import load_vault, save_vault, load_users, save_users, backup_vault
 
@@ -32,11 +32,20 @@ def test_save_vault_writes_data():
         assert json.loads(written) == data        
 
 def test_load_users_returns_data():
-    users_json = '{"alice": {"password": "pw"}}'
+    valid_salt = base64.urlsafe_b64encode(b"1234567890123456").decode()
+    valid_pw = base64.urlsafe_b64encode(b"A" * 32).decode()
+    users_json = json.dumps({
+        "alice": {
+            "auth_salt": valid_salt,
+            "enc_salt": valid_salt,
+            "password": valid_pw
+        }
+    })
     with patch("os.path.exists", return_value=True), \
          patch("builtins.open", mock_open(read_data=users_json)):
         users = load_users()
-        assert users["alice"]["password"] == "pw"
+        assert users
+        assert users["alice"]["password"] == valid_pw
 
 def test_load_users_invalid_json():
     bad_json = "{this is not valid json"
@@ -44,7 +53,7 @@ def test_load_users_invalid_json():
          patch("builtins.open", mock_open(read_data=bad_json)), \
          patch("json.load", side_effect=json.JSONDecodeError("Expecting value", "doc", 0)):
         result = load_users()
-        assert result == {}
+        assert result == None
 
 def test_load_users_file_missing():
     with patch("os.path.exists", return_value=False):
@@ -52,7 +61,7 @@ def test_load_users_file_missing():
         assert data == {}        
 
 def test_save_users_writes_json():
-    users = {"bob": {"password": "hunter2"}}
+    users = {"bob": {"aut_s": "sdf", "enc_s": "sdf", "password": "hunter2"}}
     m = mock_open()
     with patch("builtins.open", m):
         save_users(users)
@@ -61,7 +70,7 @@ def test_save_users_writes_json():
         assert json.loads(written) == users
 
 def test_backup_vault_creates_backup():
-    with patch("src.constants.get_db_file", return_value="/fake/dir/vault.json"), \
+    with patch("src.constants.get_vault", return_value="/fake/dir/vault.json"), \
          patch("os.path.exists", return_value=True), \
          patch("shutil.copy2") as mock_copy, \
          patch("src.storage.logger") as mock_logger:

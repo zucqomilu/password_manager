@@ -5,6 +5,12 @@ from .logger import logger
 
 def register_user(username: str, master_password: str) -> bool:
     users = load_users()
+
+    if users is None:
+        print("Error: Failed to load users database.")
+        logger.error("Aborting operation due to invalid users file.")
+        return False
+
     if username in users:
         print(f"User '{username}' already exists.")
         logger.warning(f"User '{username}' already exists.")
@@ -13,7 +19,6 @@ def register_user(username: str, master_password: str) -> bool:
     auth_salt = generate_salt()
     enc_salt = generate_salt()
 
-    # Key for authentication
     auth_key = derive_key(master_password, auth_salt)
     users[username] = {
         "auth_salt": base64.b64encode(auth_salt).decode(),
@@ -28,6 +33,10 @@ def register_user(username: str, master_password: str) -> bool:
 
 def authenticate_user(username: str, password: str) -> bytes:
     users = load_users()
+    if users is None:
+        logger.error("Failed to load users data during authentication.")
+        raise ValueError("User database is corrupted.")
+    
     if username not in users:
         logger.error("User does not exist.")
         raise ValueError("User does not exist.")
@@ -43,7 +52,6 @@ def authenticate_user(username: str, password: str) -> bytes:
         logger.error("Incorrect password.")
         raise ValueError("Incorrect password.")
 
-    # Use a different key for Fernet encryption
     fernet_key = derive_key(password + ":fernet", enc_salt)
     logger.info(f"User '{username}' authenticated successfully.")
     return fernet_key
