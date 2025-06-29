@@ -57,6 +57,7 @@ def test_full_user_flow(capsys):
 
     # Step 6: Check vault file contents directly
     vault = load_vault()
+    assert vault
     assert label in vault[username]
 
     # Step 7: Get the password and verify printed output
@@ -177,6 +178,7 @@ def test_retrieve_previous_password_version(monkeypatch):
 
     # Load vault and confirm previous version is present
     vault = load_vault()
+    assert vault
     vault_user = vault[username]
     versioned_label = f"{label}__v1"
     assert versioned_label in vault_user

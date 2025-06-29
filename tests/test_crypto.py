@@ -1,5 +1,3 @@
-# tests/test_crypto.py
-
 from src.crypto import derive_key, generate_salt
 
 def test_generate_salt_length():
