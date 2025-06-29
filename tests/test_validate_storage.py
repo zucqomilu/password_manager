@@ -82,10 +82,9 @@ def test_validate_users_with_extra_key(caplog, valid_user):
         assert "User 'alice' has unexpected fields: extra." in caplog.text
 
 # --- Invalid base64 format ---
-def test_validate_users_invalid_base64(caplog, valid_user):
-    valid_user["alice"]["auth_salt"] = "!!not-base64!!"
+def test_validate_users_invalid_base64(caplog, make_user):
     with caplog.at_level(logging.ERROR):
-        assert validate_users(valid_user) is False
+        assert validate_users(make_user(auth_salt=b"!!not-base64!!")) is False
         assert "User 'alice' field 'auth_salt' has invalid base64 format." in caplog.text
 
 # --- Valid base64 but wrong decoded length ---

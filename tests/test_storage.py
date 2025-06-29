@@ -7,9 +7,9 @@ def valid_b64_string(length):
     return base64.urlsafe_b64encode(b"x" * length).decode()
 
 # === load_users ===
-def test_load_users_valid(valid_user):
+def test_load_users_valid(valid_user_json):
     with patch("os.path.exists", return_value=True), \
-         patch("builtins.open", mock_open(read_data=json.dumps(valid_user))):
+         patch("builtins.open", mock_open(read_data=valid_user_json)):
         users = load_users()
         assert users
         assert isinstance(users, dict)
@@ -121,9 +121,9 @@ def test_save_users_invalid_schema_does_not_write(caplog, valid_user):
         assert "Aborting save: user validation failed." in caplog.text
 
 # === load_vault ===
-def test_load_vault_valid(valid_vault):
+def test_load_vault_valid(valid_vault_json):
     with patch("os.path.exists", return_value=True), \
-         patch("builtins.open", mock_open(read_data=json.dumps(valid_vault))):
+         patch("builtins.open", mock_open(read_data=valid_vault_json)):
         result = load_vault()
         assert result
         assert "alice" in result

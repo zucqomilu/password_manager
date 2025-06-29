@@ -1,4 +1,4 @@
-import pytest
+import pytest, logging
 from unittest.mock import patch
 from src.core import generate_password, save_password, get_password, list_labels
 
@@ -28,6 +28,14 @@ def test_save_password_new_label(fake_fernet):
         result = save_password("user1", "gmail", "pass123", fake_fernet)
         assert result is True
         mock_save.assert_called_once()
+
+def test_save_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fake_fernet):
+    with patch("src.core.load_vault", return_value=None), \
+         caplog.at_level(logging.ERROR):
+        save_password("alice", "gmail", "securepw123", fake_fernet)
+        out = capsys.readouterr().out
+        assert "Failed to load password vault" in out
+        assert "Vault loading failed: returned None." in caplog.text
 
 def test_save_password_creates_correct_version_label(fake_fernet):
     with patch("src.core.load_vault", return_value=
@@ -88,6 +96,14 @@ def test_get_password_success(fake_fernet, capsys):
         assert "secret123" in captured.out
         mock_clipboard.assert_called_once()
 
+def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fake_fernet):
+    with patch("src.core.load_vault", return_value=None), \
+         caplog.at_level(logging.ERROR):
+        get_password("alice", "gmail", fake_fernet)
+        out = capsys.readouterr().out
+        assert "Failed to load password vault" in out
+        assert "Vault loading failed: returned None." in caplog.text
+
 def test_get_password_invalid_decryption(fake_fernet, capsys):
     with patch("src.core.load_vault", return_value=
                {"user1": {"gmail": "invaliddata"}}):
@@ -115,3 +131,11 @@ def test_list_labels_empty_user_vault(fake_fernet):
          patch("builtins.print") as mock_print:
         list_labels("testuser", fake_fernet)
         mock_print.assert_any_call("No passwords found for this user.")
+
+def test_list_labels_logs_and_prints_on_vault_load_failure(capsys, caplog, fake_fernet):
+    with patch("src.core.load_vault", return_value=None), \
+         caplog.at_level(logging.ERROR):
+        list_labels("alice", fake_fernet)
+        out = capsys.readouterr().out
+        assert "Failed to load password vault" in out
+        assert "Vault loading failed: returned None." in caplog.text

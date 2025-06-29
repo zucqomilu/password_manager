@@ -1,5 +1,6 @@
 # tests/conftest.py
-import pytest, base64
+import pytest, base64, json
+from src.crypto import derive_key
 
 # Helper to generate valid base64 strings
 def b64(data: bytes) -> str:
@@ -26,33 +27,55 @@ def value_not_dict():
     return ({"alice": "this should be a dict"})
 
 @pytest.fixture
+def valid_user_json(valid_user):
+    return json.dumps(valid_user)
+
+@pytest.fixture
+def valid_vault_json(valid_vault):
+    return json.dumps(valid_vault)
+
+@pytest.fixture
+def make_user():
+    def _make_user(username="alice", password="alice_wonderland", auth_salt=b"1234567890123456", enc_salt=b"abcdefghijklmnop"):
+        auth_key = derive_key(password, auth_salt).decode()
+        return ({
+            username: {
+                "auth_salt": b64(auth_salt),
+                "enc_salt": b64(enc_salt),
+                "password": auth_key
+            }
+        })
+    return _make_user
+
+@pytest.fixture
 def valid_user():
-    salt = b64(b"1234567890123456")
-    pw = b64(b"somepasswordstring12345678901234")
+    auth_salt = b"1234567890123456"
+    enc_salt = b"1234567890123456"
+    auth_key = derive_key("alice_wonderland", auth_salt).decode()
     return ({
         "alice": {
-            "auth_salt": salt,
-            "enc_salt": salt,
-            "password": pw
+            "auth_salt": b64(auth_salt),
+            "enc_salt": b64(enc_salt),
+            "password": auth_key
         }
     })
 
 @pytest.fixture
 def valid_users():
-    salt1 = b64(b"1234567890123456")
-    salt2 = b64(b"abcdefghijklmnop")
-    pw1 = b64(b"password_for_alice_1234567890abc")
-    pw2 = b64(b"bob_secure_pass_1234567890xyzxyz")
+    auth_salt = b"1234567890123456"
+    enc_salt  = b"abcdefghijklmnop"
+    auth_key1 = derive_key("alice_password12", auth_salt).decode()
+    auth_key2 = derive_key("bob_secure_pass1", auth_salt).decode()
     return ({
         "alice": {
-            "auth_salt": salt1,
-            "enc_salt": salt1,
-            "password": pw1
+            "auth_salt": b64(auth_salt),
+            "enc_salt": b64(enc_salt),
+            "password": auth_key1
         },
         "bob": {
-            "auth_salt": salt2,
-            "enc_salt": salt2,
-            "password": pw2
+            "auth_salt": b64(auth_salt),
+            "enc_salt": b64(enc_salt),
+            "password": auth_key2
         }
     })
 
