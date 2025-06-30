@@ -121,23 +121,20 @@ def test_save_users_invalid_schema_does_not_write(caplog, valid_user):
         assert "Aborting save: user validation failed." in caplog.text
 
 # === load_vault ===
-def test_load_vault_valid(valid_vault_json):
+def test_load_vault_valid(valid_vault_json, mock_json_file):
     with patch("os.path.exists", return_value=True), \
-         patch("builtins.open", mock_open(read_data=valid_vault_json)):
-        result = load_vault()
-        assert result
-        assert "alice" in result
-
-def test_load_vault_valid_multiple_entries(valid_vault_multiple_entries):
-    with patch("os.path.exists", return_value=True), \
-         patch("builtins.open", mock_open(read_data=json.dumps(valid_vault_multiple_entries))):
+         mock_json_file(valid_vault_json):
         result = load_vault()
         assert isinstance(result, dict)
         assert "alice" in result
-        assert "email" in result["alice"]
-        assert "email__v1" in result["alice"]
-        assert "bob" in result
-        assert "github" in result["bob"]
+
+def test_load_vault_valid_multiple_entries(valid_vault_json, mock_json_file):
+    with patch("os.path.exists", return_value=True), \
+         mock_json_file(valid_vault_json):
+        result = load_vault()
+        assert isinstance(result, dict)
+        assert "alice" in result
+        assert "github" in result["alice"]
 
 def test_load_vault_file_missing(caplog):
     with patch("os.path.exists", return_value=False), \

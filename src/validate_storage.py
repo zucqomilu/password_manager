@@ -61,17 +61,20 @@ def validate_vault(data) -> bool:
             logger.error(f"Vault entry for user '{username}' must be a dict, got {type(labels).__name__}.")
             return False
         
-        for label, encrypted in labels.items():
-            if not isinstance(label, str) or not isinstance(encrypted, str):
-                logger.error(f"Vault entry '{username}:{label}' must be a string (encrypted password), got {type(encrypted).__name__}.")
-                return False
-            
-            if not is_valid_base64(encrypted):
-                logger.error(f"Vault entry '{username}:{label}' has invalid base64 format.")
+        for label, entry in labels.items():
+            if not isinstance(entry, dict):
+                logger.error(f"Vault entry '{username}:{label}' must be a dict, got {type(entry).__name__}.")
                 return False
 
-            decoded_bytes = base64.urlsafe_b64decode(encrypted)
-            if len(decoded_bytes) < DECODED_LENGTH_MIN:
-                logger.error(f"Vault entry '{username}:{label}' is too short after base64 decoding.")
+            if "password" not in entry:
+                logger.error(f"Vault entry '{username}:{label}' is missing required 'password' field.")
+                return False
+
+            if not is_valid_base64(entry["password"]):
+                logger.error(f"Vault entry '{username}:{label}' has invalid base64 password.")
+                return False
+
+            if "login" in entry and not is_valid_base64(entry["login"]):
+                logger.error(f"Vault entry '{username}:{label}' has invalid base64 login.")
                 return False
     return True

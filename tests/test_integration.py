@@ -134,7 +134,7 @@ def test_cancel_overwrite_does_not_modify_vault(isolate_files, monkeypatch):
     assert label in user_vault
     assert f"{label}__v1" not in user_vault
 
-    decrypted = fernet.decrypt(user_vault[label].encode()).decode()
+    decrypted = fernet.decrypt(user_vault[label]["password"].encode()).decode()
     assert decrypted == original_pwd
 
 def test_login_with_wrong_password_fails():
@@ -184,7 +184,7 @@ def test_retrieve_previous_password_version(monkeypatch):
     assert versioned_label in vault_user
 
     # Confirm it decrypts to the original password
-    encrypted_old_pwd = vault_user[versioned_label].encode()
+    encrypted_old_pwd = vault_user[versioned_label]["password"].encode()
     decrypted_old_pwd = fernet.decrypt(encrypted_old_pwd).decode()
     assert decrypted_old_pwd == old_pwd
 

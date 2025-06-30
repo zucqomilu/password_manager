@@ -48,7 +48,7 @@ def test_generate_command():
         mock_save_password.return_value = True
         run_cli_with_args(['prog', 'generate', 'mylabel', '--length', '20'])
         mock_generate_password.assert_called_once_with(20)
-        mock_save_password.assert_called_once_with('testuser', 'mylabel', 'password123!', b'fernet')
+        mock_save_password.assert_called_once_with('testuser', 'mylabel', 'password123!', b'fernet', login=None)
 
 def test_get_command():
     with patch('src.cli.load_session') as mock_load_session, \

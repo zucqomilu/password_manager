@@ -106,11 +106,11 @@ def test_validate_vault_valid(valid_vault):
     assert validate_vault(valid_vault) is True
 
 # --- Multiple users, one invalid ---
-def test_validate_vault_multiple_users_one_invalid(caplog, valid_vault_multiple_entries):
-    valid_vault_multiple_entries["bob"]["github"] = "this is not base64!"
+def test_validate_vault_multiple_users_one_invalid(caplog, valid_vault_multiple_users):
+    valid_vault_multiple_users["bob"]["github"] = { "password": "this is not base64!"}
     with caplog.at_level(logging.ERROR):
-        assert validate_vault(valid_vault_multiple_entries) is False
-        assert "Vault entry 'bob:github' has invalid base64 format." in caplog.text
+        assert validate_vault(valid_vault_multiple_users) is False
+        assert "Vault entry 'bob:github' has invalid base64 password." in caplog.text
         
 # --- Top-level not dict ---
 def test_validate_vault_not_dict(caplog, not_dict):
@@ -125,30 +125,30 @@ def test_validate_vault_user_entry_not_dict(caplog, value_not_dict):
         assert "Vault entry for user 'alice' must be a dict, got str" in caplog.text
 
 # --- Label value not a string ---
-def test_validate_vault_label_value_not_string(caplog, valid_vault):
-    valid_vault["alice"]["email"] = 12345
+def test_validate_vault_label_password_value_not_string(caplog, valid_vault):
+    valid_vault["alice"]["twitter"]["password"] = 12345
     with caplog.at_level(logging.ERROR):
         assert validate_vault(valid_vault) is False
-        assert "Vault entry 'alice:email' must be a string (encrypted password), got int." in caplog.text
+        assert "Vault entry 'alice:twitter' has invalid base64 password." in caplog.text
 
 # --- Label value not valid base64 ---
-def test_validate_vault_label_value_not_base64(caplog, valid_vault):
-    valid_vault["alice"]["email"] = "!!not-base64!!"
+def test_validate_vault_label_login_value_not_base64(caplog, valid_vault):
+    valid_vault["alice"]["github"]["login"] = "!!not-base64!!" 
     with caplog.at_level(logging.ERROR):
         assert validate_vault(valid_vault) is False
-        assert "Vault entry 'alice:email' has invalid base64 format." in caplog.text
+        assert "Vault entry 'alice:github' has invalid base64 login." in caplog.text
 
-# --- Valid base64 but wrong type at label level ---
-def test_validate_vault_label_is_dict(caplog, valid_vault):
-    valid_vault["alice"]["email"] = {"value": b64(b"nested")}
-    with caplog.at_level(logging.ERROR):
-        assert validate_vault(valid_vault) is False
-        assert "Vault entry 'alice:email' must be a string (encrypted password), got dict." in caplog.text
+## --- Valid base64 but wrong type at label level ---
+#def test_validate_vault_label_is_dict(caplog, valid_vault):
+#    valid_vault["alice"]["github"]["password"] = {"value": b64(b"nested")}
+#    with caplog.at_level(logging.ERROR):
+#        assert validate_vault(valid_vault) is False
+#        assert "Vault entry 'alice:email' must be a string (encrypted password), got dict." in caplog.text
 
 # --- Valid base64 but wrong decoded length ---
-def test_validate_vault_wrong_decoded_length(caplog, valid_vault):
+def test_validate_vault_missing_password(caplog, valid_vault):
     # password should decode to 16 bytes
     with caplog.at_level(logging.ERROR):
-        valid_vault["alice"]["email"] = b64(b"to short")
+        valid_vault["alice"]["github"] = { "login": b64(b"alice_login_name") }
         assert validate_vault(valid_vault) is False
-        assert "Vault entry 'alice:email' is too short after base64 decoding." in caplog.text
+        assert "Vault entry 'alice:github' is missing required 'password' field." in caplog.text

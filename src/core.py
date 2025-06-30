@@ -8,7 +8,7 @@ def generate_password(length=16):
     chars = string.ascii_letters + string.digits + string.punctuation
     return ''.join(secrets.choice(chars) for _ in range(length))
 
-def save_password(username, label, password, fernet):
+def save_password(username, label, password, fernet, login=None):
     logger.info(f"Attempting to save password for '{label}'.")
 
     vault = load_vault()
@@ -29,12 +29,12 @@ def save_password(username, label, password, fernet):
             return False
 
         try:
-            old_password = fernet.decrypt(vault_data[label].encode())
+            old_password = fernet.decrypt(vault_data[label]["password"].encode())
             version = 1
             while f"{label}__v{version}" in vault_data:
                 version += 1
             versioned_label = f"{label}__v{version}"
-            vault_data[versioned_label] = fernet.encrypt(old_password).decode()
+            vault_data[versioned_label] = { "password": fernet.encrypt(old_password).decode() }
             logger.info(f"Overwriting password for '{label}' (backup saved as '{versioned_label}').")
             print(f"Backed up previous password to '{versioned_label}'.")
 
@@ -45,7 +45,9 @@ def save_password(username, label, password, fernet):
             print(f"Error: A password already exists for '{label}', and the provided master password does not match.")
             return False
     
-    vault_data[label] = fernet.encrypt(password.encode()).decode()
+    vault_data[label] = { "password": fernet.encrypt(password.encode()).decode() }
+    if login:
+        vault_data[label]["login"] = fernet.encrypt(login.encode()).decode()
     vault[username] = vault_data
     save_vault(vault)
         
@@ -63,16 +65,16 @@ def get_password(username, label, fernet, show=False):
         return
     
     vault_data = vault.get(username, {})
-    encrypted_hash = vault_data.get(label)
+    entry = vault_data.get(label)
     
-    if encrypted_hash:
+    if entry:
         try:
-            decrypted_hash = fernet.decrypt(encrypted_hash.encode()).decode()
-            pyperclip.copy(decrypted_hash)
+            decrypted_pw = fernet.decrypt(entry["password"].encode()).decode()
+            pyperclip.copy(decrypted_pw)
             logger.info(f"Password for '{label}' has been copied to the clipboard.")
             print(f"Password for '{label}' has been copied to the clipboard.")
             if show:
-                print(f"Password: {decrypted_hash}")
+                print(f"Password: {decrypted_pw}")
         except:
             logger.warning(f"Failed to decrypt password for '{label}' — possible wrong master password or corrupted data.")
             print("Incorrect master password or data corrupted.")
@@ -96,9 +98,11 @@ def list_labels(username, fernet):
         return
 
     print("Stored labels:")
-    for label in vault_user:
+    for label, entry in vault_user.items():
         try:
-            fernet.decrypt(vault_user[label].encode())
-            print(f"- {label}")
+            has_login = "login" in entry
+            suffix = " (with login)" if has_login else ""
+            fernet.decrypt(entry["password"].encode())
+            print(f"- {label}{suffix}")
         except:
             continue

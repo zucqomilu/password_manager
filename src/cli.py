@@ -26,6 +26,7 @@ def main(argv=None):
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
     gen_parser.add_argument('label', help='Label for the password')
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
+    gen_parser.add_argument('--login', help='Optional login/email/username to associate with password')
 
     # === GET ===
     get_parser = subparsers.add_parser('get', help='Get a password by label')
@@ -73,7 +74,7 @@ def main(argv=None):
     # === HANDLE USER COMMANDS ===
     if args.command == 'generate':
         pwd = generate_password(args.length)
-        if save_password(username, args.label, pwd, fernet):
+        if save_password(username, args.label, pwd, fernet, login=args.login):
             logger.info(f"Generated new password for '{args.label}' with length {args.length}.")
             print(f"Generated password: {pwd}")
     elif args.command == 'get':
