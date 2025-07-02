@@ -3,13 +3,14 @@ import pytest, base64, json, builtins
 from src.crypto import derive_key
 from cryptography.fernet import Fernet
 from unittest.mock import mock_open, patch
+
 # Helper to generate valid base64 strings
 def b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode()
 
-@pytest.fixture
-def fernet():
-    return Fernet(derive_key("masterpassword", b"1234567890123456"))
+@pytest.fixture()
+def fernet(password="alice_wonderland", salt=b"1234567890123456"):
+    return Fernet(derive_key(password, salt))
 
 @pytest.fixture
 def valid_b64():
@@ -101,51 +102,47 @@ def mock_json_file():
     return _mock
 
 @pytest.fixture
-def valid_vault():
-    password = "alice_wonderland"
-    auth_salt = b"1234567890123456"
-    fernet_key = Fernet(derive_key(password, auth_salt))
-
-    encrypted_github_pw =  fernet_key.encrypt(b"supersecurepass1")
-    encrypted_twitter_pw = fernet_key.encrypt(b"anothersecurepas")
-    encrypted_login =      fernet_key.encrypt(b"alice@example.com")
+def valid_vault(fernet):
+    encrypted_github_pw =      fernet.encrypt(b"supersecurepass1").decode()
+    new_encrypted_twitter_pw = fernet.encrypt(b"newsecurepass123").decode()
+    encrypted_twitter_pw =     fernet.encrypt(b"anothersecurepas").decode()
+    encrypted_login =          fernet.encrypt(b"alice@example.com").decode()
 
     return {
         "alice": {
             "github": {
-                "password": b64(encrypted_github_pw),
-                "login": b64(encrypted_login)
+                "password": encrypted_github_pw,
+                "login": encrypted_login
             },
             "twitter": {
-                "password": b64(encrypted_twitter_pw)
+                "password": new_encrypted_twitter_pw
+            },
+            "twitter__v1": {
+                "password": encrypted_twitter_pw
             }
         }
     }
 
 @pytest.fixture
-def valid_vault_multiple_users():
-    password = "alice_wonderland"
-    auth_salt = b"1234567890123456"
-    fernet_key = Fernet(derive_key(password, auth_salt))
-
-    encrypted_github_pw =  fernet_key.encrypt(b"supersecurepass1")
-    encrypted_twitter_pw = fernet_key.encrypt(b"anothersecurepas")
-    encrypted_login =      fernet_key.encrypt(b"alice@example.com")
+def valid_vault_multiple_users(fernet):
+    encrypted_github_pw =  fernet.encrypt(b"supersecurepass1").decode()
+    encrypted_twitter_pw = fernet.encrypt(b"anothersecurepas").decode()
+    encrypted_login =      fernet.encrypt(b"alice@example.com").decode()
 
     return {
         "alice": {
             "github": {
-                "password": b64(encrypted_github_pw),
-                "login": b64(encrypted_login)
+                "password": encrypted_github_pw,
+                "login": encrypted_login
             },
             "twitter": {
-                "password": b64(encrypted_twitter_pw)
+                "password": encrypted_twitter_pw
             }
         },
         "bob": {
             "github": {
-                "password": b64(encrypted_github_pw),
-                "login": b64(encrypted_login)
+                "password": encrypted_github_pw,
+                "login": encrypted_login
             }
         }
     }

@@ -9,16 +9,12 @@
 #Let me know if you want to also automatically back up corrupted files before refusing to proceed
 # Password Strength Enforcement (if applicable)
 #Would you like to add a utility or CLI command to regenerate a valid users.json file if it's missing or broken?
+#Consider encryption versioning or format tagging (optional):
 
-#Update save_password() to accept and encrypt an optional login value.
-#Update validate_vault():
-#Ensure each entry is a dict with a required password and optional login
-#Validate base64 encoding and expected password length
 #e2e unit tests
 #Storing password + login
 #Retrieving both correctly
 #Validation fails on malformed login
-#Backward compatibility for old format
 
 from src.cli import main
 
