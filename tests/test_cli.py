@@ -28,11 +28,10 @@ def test_login_failure(capsys):
     with patch.object(sys, "argv", ["prog", "login"]), \
          patch("builtins.input", return_value="testuser"), \
          patch("getpass.getpass", return_value="wrongpassword"), \
-         patch('src.user.authenticate_user', side_effect=ValueError("Login failed: Incorrect password.")):
+         patch('src.cli.authenticate_user', side_effect=ValueError("Login failed: Incorrect password.")):
         cli.main()
-
-    captured = capsys.readouterr()
-    assert "Login failed: Incorrect password." in captured.out
+        captured = capsys.readouterr()
+        assert "Login failed: Incorrect password." in captured.out
     
 def test_logout():
     with patch('src.cli.clear_session') as mock_clear_session:
