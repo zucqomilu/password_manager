@@ -1,19 +1,21 @@
-import os, json, re, glob
-import tempfile, pytest
+import os, json, re
 from pathlib import Path
 from src.cli import main
+from src.session import load_session
 from unittest.mock import patch
+from cryptography.fernet import Fernet
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MAIN_PATH = PROJECT_ROOT / "main.py"
 
-@pytest.fixture
-def set_test_env(monkeypatch):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        monkeypatch.setenv("VAULT_FILE", os.path.join(tmpdir, "vault.json"))
-        monkeypatch.setenv("USERS_FILE", os.path.join(tmpdir, "users.json"))
-        monkeypatch.setenv("SESSION_FILE", os.path.join(tmpdir, "session.json"))
-        yield tmpdir  # Optional: in case the test wants to inspect or write to this dir
+def get_session_data(username: str) -> tuple[str, Fernet]:
+    session_data = load_session()
+    assert isinstance(session_data, tuple)
+    loaded_user, fernet = session_data
+    assert loaded_user == username
+    assert isinstance(fernet, Fernet)
+
+    return session_data
 
 def register_and_login(username: str, password: str, capsys, main_func):
     main_func(["register", "--username", username, "--password", password])
@@ -25,12 +27,10 @@ def register_and_login(username: str, password: str, capsys, main_func):
     assert "Login successful" in out
 
 def generate_and_get(label, capsys, main_func, option=None):
-    # Generate password
     main_func(["generate", label])
     out = capsys.readouterr().out
     assert "Generated password:" in out
         
-    # Get password
     with patch("pyperclip.copy") as mock_copy:
         if option: main_func(["get", label, option])
         else: main_func(["get", label])
@@ -45,13 +45,11 @@ def generate_and_get(label, capsys, main_func, option=None):
             generated_password = match.group(1)
             assert generated_password in out
 
-def generate_and_list(label, capsys, main_func):
-    # Try to generate a password — should fail due to missing session
+def generate_and_list_not_logged_in(label, capsys, main_func):
     main_func(["generate", label])
     out = capsys.readouterr().out
     assert "you are not logged in" in out.lower()
 
-    # Try to list passwords — should also fail
     main_func(["list"])
     out = capsys.readouterr().out
     assert "you are not logged in" in out.lower()
@@ -77,23 +75,16 @@ def generate_and_overwrite(label, overwrite, capsys, main_func):
     return pw1, pw2
 
 def test_e2e_register_and_login(capsys, set_test_env):
-    _ = set_test_env
-    username, password = "e2euser", "e2epas"
+    username, password, _ = "e2euser", "e2epas", set_test_env
     register_and_login(username, password, capsys, main)
-        
-    # Check session file is created
-    session_path = os.path.join(_, "session.json")
-    assert os.path.exists(session_path)
-    with open(session_path, "r") as f:
-        session_data = json.load(f)
-        assert session_data["username"] == username
+
+    session_data = get_session_data(username)
+    assert session_data[0] == username
 
 def test_e2e_incorrect_login_fails(capsys, set_test_env):
-    _ = set_test_env
-    session_path = os.path.join(_, "session.json")
+    session_path = os.path.join(set_test_env, "session.json")
     username, correct_password, wrong_password = "wronguser", "correct", "incorrect"
 
-    # Register with correct password
     main(["register", "--username", username, "--password", correct_password])
     capsys.readouterr()
 
@@ -104,20 +95,18 @@ def test_e2e_incorrect_login_fails(capsys, set_test_env):
     assert not os.path.exists(session_path)
         
 def test_e2e_corrupted_users_file(capsys, set_test_env):
-    _ = set_test_env
     # Corrupt the users file with invalid JSON
-    with open(os.path.join(_, "users.json"), "w") as f:
+    with open(os.path.join(set_test_env, "users.json"), "w") as f:
         f.write("{ this is not valid JSON }")
 
     # Try to register or login (should handle failure)
     main(["register", "--username", "user1", "--password", "pass"])
     out = capsys.readouterr().out
 
-    assert "Error" in out or "failed" in out.lower() or "invalid" in out.lower()
+    assert "Error: Failed to load users database." in out
 
 def test_e2e_missing_users_file(capsys, set_test_env):
-    _ = set_test_env
-    users_file = os.path.join(_, "users.json")
+    users_file = os.path.join(set_test_env, "users.json")
     # Delete the users file
     if os.path.exists(users_file):
         os.remove(users_file)
@@ -130,9 +119,8 @@ def test_e2e_missing_users_file(capsys, set_test_env):
     assert os.path.exists(users_file)
 
 def test_e2e_empty_users_file(capsys, set_test_env):
-    _ = set_test_env
     # Create an empty users file (0 bytes)
-    with open(os.path.join(_, "users.json"), "w"): pass
+    with open(os.path.join(set_test_env, "users.json"), "w"): pass
 
     # Try to register a new user — should handle gracefully
     main(["register", "--username", "user3", "--password", "pass"])
@@ -175,35 +163,33 @@ def test_e2e_no_session_requires_login(capsys, set_test_env):
     out = capsys.readouterr().out
     assert "registration successful" in out.lower()
 
-    generate_and_list(label, capsys, main)
+    generate_and_list_not_logged_in(label, capsys, main)
 
 def test_e2e_session_deleted_requires_login(capsys, set_test_env):
-    _ = set_test_env
     username, password, label = "ghost", "nopersist", "bank"
     register_and_login(username, password, capsys, main)
 
     # Simulate session deletion
-    session_path = os.path.join(_, "session.json")
+    session_path = os.path.join(set_test_env, "session.json")
     assert os.path.exists(session_path)
     os.remove(session_path)
     assert not os.path.exists(session_path)
 
-    generate_and_list(label, capsys, main)
+    generate_and_list_not_logged_in(label, capsys, main)
 
 def test_e2e_corrupted_session_file(capsys, set_test_env):
-    _ = set_test_env
     username, password, label = "brokenuser", "pass123", "bank"
     register_and_login(username, password, capsys, main)
 
     # Corrupt the session file
-    with open(os.path.join(_, "session.json"), "w") as f:
+    with open(os.path.join(set_test_env, "session.json"), "w") as f:
         f.write("this is not json")
 
     # Run a command that requires a valid session
     main(["generate", label])
     out = capsys.readouterr().out
 
-    assert "You are not logged in" in out or "Please run `login` first" in out
+    assert "You are not logged in" in out and "Please run `login` first" in out
 
 def test_e2e_list_labels(capsys, set_test_env):
     _ = set_test_env
@@ -236,15 +222,14 @@ def test_e2e_get_nonexistent_label(capsys, set_test_env):
     assert f"No password found for '{label}'" in out
 
 def test_e2e_overwrite_creates_backup(capsys, set_test_env):
-    _ = set_test_env
     username, password, label = "versionuser", "verpass", "social"
     register_and_login(username, password, capsys, main)
 
     generate_and_overwrite(label, "y", capsys, main)
 
     # Check that backup file was created
-    vault_dir = os.path.join(_, "vault.json").rsplit("/", 1)[0]
-    backups = list(glob.glob(os.path.join(vault_dir, "vault_backup_*.json")))
+    backups = [ f for f in Path(set_test_env).iterdir()
+                if f.name.startswith("vault_backup_") and f.name.endswith(".json") ]
     assert len(backups) == 1
 
 def test_e2e_overwrite_creates_versions(capsys, set_test_env):
@@ -265,7 +250,6 @@ def test_e2e_overwrite_creates_versions(capsys, set_test_env):
     assert f"Password: {pw2}" in out
 
 def test_e2e_cancel_overwrite_preserves_password(capsys, set_test_env):
-    _ = set_test_env
     username, password, label = "canceluser", "refusepass", "bank"
     register_and_login(username, password, capsys, main)
 
@@ -279,15 +263,12 @@ def test_e2e_cancel_overwrite_preserves_password(capsys, set_test_env):
     assert f"Password: {original_password}" in out
 
     # Check that no backup file has been created
-    backup_files = [
-        name for name in os.listdir(_)
-        if name.startswith("vault_backup_") and name.endswith(".json")
-    ]
-    assert len(backup_files) == 0, f"Expected no backups, but found: {backup_files}"
+    backup_files = [ name for name in os.listdir(set_test_env)
+                     if name.startswith("vault_backup_") and name.endswith(".json") ]
+    assert len(backup_files) == 0
 
 def test_e2e_logout_clears_session(capsys, set_test_env):
-    _ = set_test_env
-    session_path = os.path.join(_, "session.json")
+    session_path = os.path.join(set_test_env, "session.json")
     username, password = "logoutuser", "logoutpass"
     register_and_login(username, password, capsys, main)
 
@@ -308,7 +289,6 @@ def test_e2e_logout_clears_session(capsys, set_test_env):
 
 def test_e2e_single_active_session(capsys, set_test_env):
     _ = set_test_env
-    # Register both users
     register_and_login("alice", "wonderland", capsys, main)
     register_and_login("bob", "builder", capsys, main)
 
@@ -320,8 +300,6 @@ def test_e2e_single_active_session(capsys, set_test_env):
     # Retrieve password
     main(["get", label, "--show"])
     out = capsys.readouterr().out
-
-    # Confirm it says Bob is logged in
     assert "Password for 'testlabel'" in out
     assert "has been copied to the clipboard" in out
 
@@ -331,4 +309,37 @@ def test_e2e_single_active_session(capsys, set_test_env):
 
     main(["get", label, "--show"])
     out = capsys.readouterr().out
-    assert "not logged in" in out.lower()
+    assert "not logged in" in out
+
+def test_cli_generate_with_login(set_test_env, capsys):
+    username, password = "alice", "wonderland"
+    register_and_login(username, password, capsys, main)
+
+    # Generate + save a password with login
+    main(["generate", "github", "--login", "alice@example.com"])
+    out = capsys.readouterr().out
+    assert "Saved password for 'github'" in out
+    assert "Generated password:" in out
+
+    # Check vault content
+    with open(os.path.join(set_test_env, "vault.json"), "r") as f:
+        vault = json.load(f)
+
+    assert isinstance(vault, dict)
+
+    # Load Fernet key from session file
+    session_data = get_session_data(username)
+    assert isinstance(session_data, tuple)
+    fernet = session_data[1]
+    
+    # Extract the encrypted fields
+    encrypted_entry = vault[username]["github"]
+    encrypted_pw = encrypted_entry["password"]
+    encrypted_login = encrypted_entry["login"]
+
+    # Decrypt and verify
+    decrypted_pw = fernet.decrypt(encrypted_pw.encode()).decode()
+    decrypted_login = fernet.decrypt(encrypted_login.encode()).decode()
+
+    assert len(decrypted_pw) == 16  # Default password length
+    assert decrypted_login == "alice@example.com"

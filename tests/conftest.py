@@ -1,5 +1,5 @@
 # tests/conftest.py
-import pytest, base64, json, builtins
+import pytest, base64, json, builtins, tempfile, os
 from src.crypto import derive_key
 from cryptography.fernet import Fernet
 from unittest.mock import mock_open, patch
@@ -7,6 +7,14 @@ from unittest.mock import mock_open, patch
 # Helper to generate valid base64 strings
 def b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode()
+
+@pytest.fixture
+def set_test_env(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        monkeypatch.setenv("VAULT_FILE", os.path.join(tmpdir, "vault.json"))
+        monkeypatch.setenv("USERS_FILE", os.path.join(tmpdir, "users.json"))
+        monkeypatch.setenv("SESSION_FILE", os.path.join(tmpdir, "session.json"))
+        yield tmpdir  # Optional: in case the test wants to inspect or write to this dir
 
 @pytest.fixture()
 def fernet(password="alice_wonderland", salt=b"1234567890123456"):
