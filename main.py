@@ -10,11 +10,7 @@
 # Password Strength Enforcement (if applicable)
 #Would you like to add a utility or CLI command to regenerate a valid users.json file if it's missing or broken?
 #Consider encryption versioning or format tagging (optional):
-
-#e2e unit tests
-#Storing password + login
-#Retrieving both correctly
-#Validation fails on malformed login
+#Add MFA or hardware key support
 
 from src.cli import main
 

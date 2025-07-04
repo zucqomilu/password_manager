@@ -84,6 +84,11 @@ def get_password(username, label, fernet, show=False):
             pyperclip.copy(decrypted_pw)
             logger.info(f"Password for '{label}' has been copied to the clipboard.")
             print(f"Password for '{label}' has been copied to the clipboard.")
+            
+            if "login" in entry:
+                login = fernet.decrypt(entry["login"].encode()).decode()
+                print(f"Login: {login}")
+                
             if show:
                 print(f"Password: {decrypted_pw}")
         except:

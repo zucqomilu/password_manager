@@ -144,6 +144,13 @@ def test_get_password_success(fernet, capsys, valid_vault):
         assert "supersecurepass1" in captured.out
         mock_clipboard.assert_called_once()
 
+def test_get_password_with_login(capsys, fernet, valid_vault):
+    with patch("src.core.load_vault", return_value=valid_vault), patch("pyperclip.copy"):
+        get_password("alice", "github", fernet, show=True)
+        out = capsys.readouterr().out
+        assert "Password: supersecurepass1" in out
+        assert "Login: alice@example.com" in out
+
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("src.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
