@@ -34,7 +34,7 @@ def test_full_user_flow(capsys, set_test_env):
     fernet = register_login_save_session_load_session(username, password)
 
     label, pwd = "email", "p@ssW0rd!"
-    assert save_password(username, label, pwd, fernet)
+    assert save_password(username, label, fernet, password=pwd)
 
     vault_user_entry = get_vault_user_entry(username, set_test_env)
     assert label in vault_user_entry
@@ -48,11 +48,11 @@ def test_overwrite_triggers_versioning_and_backup(set_test_env, monkeypatch):
     fernet = register_login_save_session_load_session(username, password)
     
     label, pwd1 = "email", "initial-pass"
-    assert save_password(username, label, pwd1, fernet)
+    assert save_password(username, label, fernet, pwd1)
     
     monkeypatch.setattr("builtins.input", lambda _: "y")
     pwd2 = "new-pass"
-    assert save_password(username, label, pwd2, fernet)
+    assert save_password(username, label, fernet, pwd2)
 
     vault_user_entry = get_vault_user_entry(username, set_test_env)
     assert label in vault_user_entry
@@ -68,11 +68,11 @@ def test_cancel_overwrite_does_not_modify_vault(set_test_env, monkeypatch):
     fernet = register_login_save_session_load_session(username, password)
 
     label, original_pwd = "email", "initial-pass"
-    assert save_password(username, label, original_pwd, fernet)
+    assert save_password(username, label, fernet, original_pwd)
 
     monkeypatch.setattr("builtins.input", lambda _: "n")
     new_pwd = "new-pass"
-    result = save_password(username, label, new_pwd, fernet)
+    result = save_password(username, label, fernet, new_pwd)
     assert result is False
 
     vault_user_entry = get_vault_user_entry(username, set_test_env)
@@ -99,10 +99,10 @@ def test_retrieve_previous_password_version(set_test_env, monkeypatch):
     old_pwd, new_pwd = "first-password", "second-password"
     fernet = register_login_save_session_load_session(username, password)
 
-    assert save_password(username, label, old_pwd, fernet)
+    assert save_password(username, label, fernet, old_pwd)
 
     monkeypatch.setattr("builtins.input", lambda _: "y")
-    assert save_password(username, label, new_pwd, fernet)
+    assert save_password(username, label, fernet, new_pwd)
 
     vault_user_entry = get_vault_user_entry(username, set_test_env)
     versioned_label = f"{label}__v1"
@@ -125,9 +125,18 @@ def test_save_and_get_login_password_pair(set_test_env, fernet):
     fernet = register_login_save_session_load_session(username, password)
 
     login, pwd = "alice@example.com", "p@ssW0rd!"
-    assert save_password(username, label, pwd, fernet, login=login)
+    assert save_password(username, label, fernet, password=pwd, login=login)
 
     vault_user_entry = get_vault_user_entry(username, set_test_env)
     encrypted = vault_user_entry["email"]
     assert fernet.decrypt(encrypted["password"].encode()).decode() == pwd
     assert fernet.decrypt(encrypted["login"].encode()).decode() == login
+
+def test_save_and_get_login_only_returns_false(set_test_env, fernet):
+    _ = set_test_env
+    username, password, label = "alice", "master123", "email"
+    fernet = register_login_save_session_load_session(username, password)
+
+    login = "alice@example.com"
+    result = save_password(username, label, fernet, login=login)
+    assert result is False

@@ -8,7 +8,7 @@ def generate_password(length=16):
     chars = string.ascii_letters + string.digits + string.punctuation
     return ''.join(secrets.choice(chars) for _ in range(length))
 
-def save_password(username, label, password, fernet, login=None):
+def save_password(username, label, fernet, password=None, login=None):
     logger.info(f"Attempting to save password for '{label}'.")
 
     vault = load_vault()
@@ -21,7 +21,16 @@ def save_password(username, label, password, fernet, login=None):
         vault[username] = {}
         
     vault_data = vault[username]
-    if label in vault_data:
+    existing_entry = vault_data.get(label)
+
+    if not existing_entry:
+        if not password:
+            print(f"Error: Cannot create label '{label}' without a password.")
+            logger.warning(f"Attempted to create label '{label}' without a password.")
+            return False
+        existing_entry = {}
+
+    if "password" in existing_entry and password:
         confirm = input(f"A password for '{label}' already exists. Overwrite? (y/N): ").strip().lower()
         if confirm != 'y':
             logger.info(f"User cancelled overwrite for '{label}'.")
@@ -34,7 +43,8 @@ def save_password(username, label, password, fernet, login=None):
             while f"{label}__v{version}" in vault_data:
                 version += 1
             versioned_label = f"{label}__v{version}"
-            vault_data[versioned_label] = { "password": fernet.encrypt(old_password).decode() }
+            vault_data[versioned_label] = { "password": fernet.encrypt(old_password).decode(),
+                                            **({"login": existing_entry["login"]} if "login" in existing_entry else {}) }
             logger.info(f"Overwriting password for '{label}' (backup saved as '{versioned_label}').")
             print(f"Backed up previous password to '{versioned_label}'.")
 
@@ -44,15 +54,16 @@ def save_password(username, label, password, fernet, login=None):
             logger.error(f"Failed to overwrite '{label}' due to incorrect master password.")
             print(f"Error: A password already exists for '{label}', and the provided master password does not match.")
             return False
-    
-    vault_data[label] = { "password": fernet.encrypt(password.encode()).decode() }
+
+    if password:
+        existing_entry["password"] = fernet.encrypt(password.encode()).decode()
     if login:
-        vault_data[label]["login"] = fernet.encrypt(login.encode()).decode()
-    vault[username] = vault_data
-    save_vault(vault)
+        existing_entry["login"] = fernet.encrypt(login.encode()).decode()
         
-    logger.info(f"Password saved for '{label}'.")
-    print(f"Saved password for '{label}'.")
+    vault_data[label] = existing_entry
+    save_vault(vault)
+    logger.info(f"Credentials saved for '{label}'.")
+    print(f"Saved credentials for '{label}'.")
     return True
 
 def get_password(username, label, fernet, show=False):

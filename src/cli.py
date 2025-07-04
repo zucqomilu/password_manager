@@ -28,6 +28,12 @@ def main(argv=None):
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
     gen_parser.add_argument('--login', help='Optional login/email/username to associate with password')
 
+    # === SET ===
+    set_parser = subparsers.add_parser('set', help='Set password/login for a label')
+    set_parser.add_argument('label', help='Label to set credentials for')
+    set_parser.add_argument('--password', help='Password to set (optional)')
+    set_parser.add_argument('--login', help='Login (email/username) to set (optional)')
+
     # === GET ===
     get_parser = subparsers.add_parser('get', help='Get a password by label')
     get_parser.add_argument('label')
@@ -74,9 +80,15 @@ def main(argv=None):
     # === HANDLE USER COMMANDS ===
     if args.command == 'generate':
         pwd = generate_password(args.length)
-        if save_password(username, args.label, pwd, fernet, login=args.login):
+        if save_password(username, args.label, fernet, password=pwd, login=args.login):
             logger.info(f"Generated new password for '{args.label}' with length {args.length}.")
             print(f"Generated password: {pwd}")
+    elif args.command == "set":
+        if not args.password and not args.login:
+            logger.error(f"You must run with eather args --password or --login.")
+            print("Error: You must specify at least --password or --login.")
+            return
+        save_password(username, args.label, fernet, password=args.password, login=args.login)
     elif args.command == 'get':
         get_password(username, args.label, fernet, show=args.show)
     elif args.command == 'list':

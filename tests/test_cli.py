@@ -47,7 +47,23 @@ def test_generate_command():
         mock_save_password.return_value = True
         run_cli_with_args(['prog', 'generate', 'mylabel', '--length', '20'])
         mock_generate_password.assert_called_once_with(20)
-        mock_save_password.assert_called_once_with('testuser', 'mylabel', 'password123!', b'fernet', login=None)
+        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='password123!', login=None)
+
+def test_set_command_success():
+    with patch('src.cli.load_session') as mock_load_session, \
+         patch('src.cli.save_password') as mock_save_password:
+        mock_load_session.return_value = ('testuser', b'fernet')
+        run_cli_with_args(['prog', 'set', 'mylabel', '--password', 'mypassword', '--login', 'testuser@example.com'])
+        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='mypassword', login='testuser@example.com')
+
+def test_set_command_failure(capsys):
+    with patch('src.cli.load_session') as mock_load_session, \
+         patch('src.cli.save_password') as mock_save_password:
+        mock_load_session.return_value = ('testuser', b'fernet')
+        run_cli_with_args(['prog', 'set', 'mylabel'])
+        mock_save_password.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Error: You must specify at least --password or --login." in captured.out
 
 def test_get_command():
     with patch('src.cli.load_session') as mock_load_session, \

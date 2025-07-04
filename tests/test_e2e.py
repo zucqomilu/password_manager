@@ -1,9 +1,11 @@
-import os, json, re
+import os, re
 from pathlib import Path
 from src.cli import main
 from src.session import load_session
 from unittest.mock import patch
 from cryptography.fernet import Fernet
+
+from src.storage import load_vault
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MAIN_PATH = PROJECT_ROOT / "main.py"
@@ -129,22 +131,19 @@ def test_e2e_empty_users_file(capsys, set_test_env):
     assert "Failed to load users database." in out
 
 def test_e2e_generate_and_get(capsys, set_test_env):
-    _ = set_test_env
-    username, password, label = "alice", "wonderland", "email"
+    username, password, label, _ = "alice", "wonderland", "email", set_test_env
     register_and_login(username, password, capsys, main)
 
     generate_and_get(label, capsys, main, "--show")
 
 def test_e2e_get_without_show(capsys, set_test_env):
-    _ = set_test_env
-    username, password, label = "carol", "pass123", "social"
+    username, password, label, _ = "carol", "pass123", "social", set_test_env
     register_and_login(username, password, capsys, main)
 
     generate_and_get(label, capsys, main)
         
 def test_e2e_session_persistence(capsys, set_test_env):
-    _ = set_test_env
-    username, password, label = "persistuser", "stayloggedin", "github"
+    username, password, label, _ = "persistuser", "stayloggedin", "github", set_test_env
     register_and_login(username, password, capsys, main)
 
     generate_and_get(label, capsys, main)
@@ -155,8 +154,7 @@ def test_e2e_session_persistence(capsys, set_test_env):
     assert f"Password for '{label}'" in out or "Password:" in out
 
 def test_e2e_no_session_requires_login(capsys, set_test_env):
-    _ = set_test_env
-    username, password, label = "ghost", "nopersist", "bank"
+    username, password, label, _ = "ghost", "nopersist", "bank", set_test_env
 
     # Register but do not log in
     main(["register", "--username", username, "--password", password])
@@ -192,8 +190,7 @@ def test_e2e_corrupted_session_file(capsys, set_test_env):
     assert "You are not logged in" in out and "Please run `login` first" in out
 
 def test_e2e_list_labels(capsys, set_test_env):
-    _ = set_test_env
-    username, password = "bob", "builder" 
+    username, password, _ = "bob", "builder" , set_test_env 
     register_and_login(username, password, capsys, main)
     labels = ["github", "email", "bank"]
 
@@ -211,8 +208,7 @@ def test_e2e_list_labels(capsys, set_test_env):
         assert label in out
 
 def test_e2e_get_nonexistent_label(capsys, set_test_env):
-    _ = set_test_env
-    username, password, label = "missinguser", "hunter2", "nonexistent"
+    username, password, label, _ = "missinguser", "hunter2", "nonexistent", set_test_env
     register_and_login(username, password, capsys, main)
     
     # Attempt to get a non-existent label
@@ -312,19 +308,17 @@ def test_e2e_single_active_session(capsys, set_test_env):
     assert "not logged in" in out
 
 def test_cli_generate_with_login(set_test_env, capsys):
-    username, password = "alice", "wonderland"
+    username, password, _ = "alice", "wonderland", set_test_env
     register_and_login(username, password, capsys, main)
 
     # Generate + save a password with login
     main(["generate", "github", "--login", "alice@example.com"])
     out = capsys.readouterr().out
-    assert "Saved password for 'github'" in out
+    assert "Saved credentials for 'github'" in out
     assert "Generated password:" in out
 
     # Check vault content
-    with open(os.path.join(set_test_env, "vault.json"), "r") as f:
-        vault = json.load(f)
-
+    vault = load_vault()
     assert isinstance(vault, dict)
 
     # Load Fernet key from session file
@@ -343,3 +337,99 @@ def test_cli_generate_with_login(set_test_env, capsys):
 
     assert len(decrypted_pw) == 16  # Default password length
     assert decrypted_login == "alice@example.com"
+
+def test_cli_set_login_and_password(set_test_env, capsys):
+    username, _ = "alice", set_test_env
+    register_and_login(username, "wonderland", capsys, main)
+
+    main(["set", "linkedin", "--login", "alice@linkedin.com", "--password", "secret123"])
+    out = capsys.readouterr().out
+    assert "Saved credentials for 'linkedin'." in out
+
+    vault = load_vault()
+    assert isinstance(vault, dict)
+    session_data = get_session_data(username)
+    assert isinstance(session_data, tuple)
+    fernet = session_data[1]
+
+    encrypted_login = vault[username]["linkedin"]["login"]
+    encrypted_pw = vault[username]["linkedin"]["password"]
+    decrypted_login = fernet.decrypt(encrypted_login.encode()).decode()
+    decrypted_pw = fernet.decrypt(encrypted_pw.encode()).decode()
+    assert decrypted_pw == "secret123"
+    assert decrypted_login == "alice@linkedin.com"
+
+def test_cli_set_password_only(set_test_env, capsys):
+    username, _ = "alice", set_test_env
+    register_and_login(username, "wonderland", capsys, main)
+
+    main(["set", "linkedin", "--password", "secret123"])
+    out = capsys.readouterr().out
+    assert "Saved credentials for 'linkedin'." in out
+
+    vault = load_vault()
+    assert isinstance(vault, dict)
+    session_data = get_session_data(username)
+    assert isinstance(session_data, tuple)
+    fernet = session_data[1]
+
+    encrypted_pw = vault[username]["linkedin"]["password"]
+    decrypted_pw = fernet.decrypt(encrypted_pw.encode()).decode()
+    assert decrypted_pw == "secret123"
+
+def test_cli_set_login_only(set_test_env, capsys):
+    username, _ = "alice", set_test_env
+    register_and_login(username, "wonderland", capsys, main)
+
+    main(["set", "linkedin", "--login", "alice@linkedin.com"])
+    out = capsys.readouterr().out
+    assert "Error: Cannot create label 'linkedin' without a password." in out
+
+    vault = load_vault()
+    assert isinstance(vault, dict)
+    #assert vault[username] is None
+
+def test_update_only_login_on_existing_label(set_test_env, fernet, capsys):
+    username, password, label, _ = "alice", "wonderland", "email", set_test_env
+    register_and_login(username, password, capsys, main)
+
+    main(["generate", label, "--login", "old@example.com"])
+    capsys.readouterr()
+
+    main(["set", label, "--login", "new@example.com"])
+    out = capsys.readouterr().out
+    assert "Saved credentials for 'email'" in out
+
+    vault = load_vault()
+    assert isinstance(vault, dict)
+    session_data = get_session_data(username)
+    assert isinstance(session_data, tuple)
+    fernet = session_data[1]
+    
+    encrypted_login = vault[username][label]["login"]
+    decrypted_login = fernet.decrypt(encrypted_login.encode()).decode()
+    assert decrypted_login == "new@example.com"
+
+def test_update_password_and_login_on_existing_label(set_test_env, fernet, capsys):
+    username, password, label, _ = "alice", "wonderland", "email", set_test_env
+    register_and_login(username, password, capsys, main)
+
+    main(["generate", label, "--login", "first@example.com"])
+    capsys.readouterr()
+
+    new_pass = "UpdatedP@ssw0rd!"
+    with patch("builtins.input", return_value='y'):
+        main(["set", label, "--password", new_pass, "--login", "updated@example.com"])
+    out = capsys.readouterr().out
+    assert "Backed up previous password to 'email__v1'." in out
+    assert "Saved credentials for 'email'" in out
+
+    vault = load_vault()
+    assert isinstance(vault, dict)
+    session_data = get_session_data(username)
+    assert isinstance(session_data, tuple)
+    fernet = session_data[1]
+
+    entry = vault[username][label]
+    assert fernet.decrypt(entry["password"].encode()).decode() == new_pass
+    assert fernet.decrypt(entry["login"].encode()).decode() == "updated@example.com"
