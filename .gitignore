@@ -11,3 +11,4 @@ __pycache__
 .coveragerc
 coverage.json
 session.json
+notes.txt
