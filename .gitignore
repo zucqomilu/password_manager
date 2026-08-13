@@ -12,3 +12,5 @@ __pycache__
 coverage.json
 session.json
 notes.txt
+commits.txt
+base64
