@@ -1,52 +1,99 @@
-# tests/conftest.py
 import pytest, base64, json, builtins, tempfile, os
+from keyring.errors import PasswordDeleteError
 from src.crypto import derive_key
 from cryptography.fernet import Fernet
 from unittest.mock import mock_open, patch
+
+
+test_keyring = {}
+
+
+def mock_get_password(service, username):
+    return test_keyring.get((service, username))
+
+
+def mock_set_password(service, username, password):
+    test_keyring[(service, username)] = password
+
+
+def mock_delete_password(service, username):
+    key = (service, username)
+
+    if key not in test_keyring:
+        raise PasswordDeleteError("Password not found")
+
+    del test_keyring[key]
+
 
 # Helper to generate valid base64 strings
 def b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode()
 
+
 @pytest.fixture
 def set_test_env(monkeypatch):
+    test_keyring.clear()
+
     with tempfile.TemporaryDirectory() as tmpdir:
         monkeypatch.setenv("VAULT_FILE", os.path.join(tmpdir, "vault.json"))
         monkeypatch.setenv("USERS_FILE", os.path.join(tmpdir, "users.json"))
-        monkeypatch.setenv("SESSION_FILE", os.path.join(tmpdir, "session.json"))
-        yield tmpdir  # Optional: in case the test wants to inspect or write to this dir
+
+        monkeypatch.setattr("src.session.keyring.get_password", mock_get_password)
+        monkeypatch.setattr("src.session.keyring.set_password", mock_set_password)
+        monkeypatch.setattr("src.session.keyring.delete_password", mock_delete_password)
+        
+        yield tmpdir
+
+    test_keyring.clear()
+
+
+@pytest.fixture
+def mock_session_keyring():
+    def _set(data):
+        test_keyring[("password_manager", "session")] = data
+
+    return _set
+
 
 @pytest.fixture()
 def fernet(password="alice_wonderland", salt=b"1234567890123456"):
     return Fernet(derive_key(password, salt))
 
+
 @pytest.fixture
 def valid_b64():
     return base64.urlsafe_b64encode(b"secret12345678901234567890").decode()
+
 
 @pytest.fixture
 def corrupted_json():
     return '{ "alice": {"email": "incomplete'
 
+
 @pytest.fixture
 def invalid_json():
     return "{ this is not valid JSON }"
+
 
 @pytest.fixture
 def not_dict():
     return (["not", "a", "dict"])
 
+
 @pytest.fixture
 def value_not_dict():
     return ({"alice": "this should be a dict"})
+
 
 @pytest.fixture
 def valid_user_json(valid_user):
     return json.dumps(valid_user)
 
+
 @pytest.fixture
 def valid_vault_json(valid_vault):
     return json.dumps(valid_vault)
+
 
 @pytest.fixture
 def make_user():
@@ -61,6 +108,7 @@ def make_user():
         })
     return _make_user
 
+
 @pytest.fixture
 def valid_user():
     auth_salt = b"1234567890123456"
@@ -73,6 +121,7 @@ def valid_user():
             "password": auth_key
         }
     })
+
 
 @pytest.fixture
 def valid_users():
@@ -93,6 +142,7 @@ def valid_users():
         }
     })
 
+
 @pytest.fixture
 def mock_json_file():
     """
@@ -108,6 +158,7 @@ def mock_json_file():
         m.return_value.__iter__ = lambda _: iter(json_string.splitlines())
         return patch.object(builtins, "open", m)
     return _mock
+
 
 @pytest.fixture
 def valid_vault(fernet):
@@ -130,6 +181,7 @@ def valid_vault(fernet):
             }
         }
     }
+
 
 @pytest.fixture
 def valid_vault_multiple_users(fernet):

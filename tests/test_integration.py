@@ -1,11 +1,11 @@
-# tests/test_integration.py
 import pytest
 from pathlib import Path
 from src.user import register_user, authenticate_user
 from src.core import save_password, get_password
-from src.session import save_session, load_session
+from src.session import save_session, load_session, clear_session
 from src.storage import load_vault
 from cryptography.fernet import Fernet
+
 
 def register_login_save_session_load_session(username: str, password: str) -> Fernet:
     assert register_user(username, password)
@@ -20,6 +20,7 @@ def register_login_save_session_load_session(username: str, password: str) -> Fe
 
     return fernet
 
+
 def get_vault_user_entry(username: str, set_test_env) -> dict:
     _ = set_test_env
     vault_data = load_vault()
@@ -28,6 +29,7 @@ def get_vault_user_entry(username: str, set_test_env) -> dict:
     assert isinstance(vault_user_entry, dict)
 
     return vault_user_entry
+
 
 def test_full_user_flow(capsys, set_test_env):
     username, password = "testuser", "secure123"
@@ -42,6 +44,7 @@ def test_full_user_flow(capsys, set_test_env):
     get_password(username, label, fernet, show=True)
     captured = capsys.readouterr()
     assert "Password: p@ssW0rd!" in captured.out
+
 
 def test_overwrite_triggers_versioning_and_backup(set_test_env, monkeypatch):
     username, password = "testuser", "secret123"
@@ -63,6 +66,7 @@ def test_overwrite_triggers_versioning_and_backup(set_test_env, monkeypatch):
                 if f.name.startswith("vault_backup_") and f.name.endswith(".json") ]
     assert len(backups) == 1
 
+
 def test_cancel_overwrite_does_not_modify_vault(set_test_env, monkeypatch):
     username, password = "testuser", "secret123"
     fernet = register_login_save_session_load_session(username, password)
@@ -82,17 +86,18 @@ def test_cancel_overwrite_does_not_modify_vault(set_test_env, monkeypatch):
     decrypted = fernet.decrypt(vault_user_entry[label]["password"].encode()).decode()
     assert decrypted == original_pwd
 
+
 def test_login_with_wrong_password_fails(set_test_env):
     _ = set_test_env
     username, correct_password, wrong_password = "testuser", "rightpass", "wrongpass"
     assert register_user(username, correct_password)
+    assert load_session() is None
 
-    # Authentication with wrong password should raise ValueError
     with pytest.raises(ValueError, match="Incorrect password"):
         authenticate_user(username, wrong_password)
 
-    session = load_session()
-    assert session is None
+    assert load_session() is None
+
 
 def test_retrieve_previous_password_version(set_test_env, monkeypatch):
     username, password, label = "testuser", "master123", "email"
@@ -112,6 +117,7 @@ def test_retrieve_previous_password_version(set_test_env, monkeypatch):
     decrypted_old_pwd = fernet.decrypt(encrypted_old_pwd).decode()
     assert decrypted_old_pwd == old_pwd
 
+
 def test_retrieve_nonexistent_label_returns_none(set_test_env):
     _ = set_test_env
     username, password, missing_label = "testuser", "secure123", "does_not_exist"
@@ -120,7 +126,8 @@ def test_retrieve_nonexistent_label_returns_none(set_test_env):
     result = get_password(username, missing_label, fernet)
     assert result is None
 
-def test_save_and_get_login_password_pair(set_test_env, fernet):
+
+def test_save_and_get_login_password_pair(set_test_env):
     username, password, label = "alice", "master123", "email"
     fernet = register_login_save_session_load_session(username, password)
 
@@ -132,7 +139,8 @@ def test_save_and_get_login_password_pair(set_test_env, fernet):
     assert fernet.decrypt(encrypted["password"].encode()).decode() == pwd
     assert fernet.decrypt(encrypted["login"].encode()).decode() == login
 
-def test_save_and_get_login_only_returns_false(set_test_env, fernet):
+
+def test_save_and_get_login_only_returns_false(set_test_env):
     _ = set_test_env
     username, password, label = "alice", "master123", "email"
     fernet = register_login_save_session_load_session(username, password)
@@ -140,3 +148,17 @@ def test_save_and_get_login_only_returns_false(set_test_env, fernet):
     login = "alice@example.com"
     result = save_password(username, label, fernet, login=login)
     assert result is False
+
+
+def test_session_can_be_cleared(set_test_env):
+    _ = set_test_env
+    username = "testuser"
+    password = "secure123"
+
+    register_login_save_session_load_session(username, password)
+
+    assert load_session() is not None
+
+    clear_session()
+
+    assert load_session() is None

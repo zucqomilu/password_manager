@@ -10,8 +10,9 @@ def get_vault():
 def get_users():
     return os.environ.get("USERS_FILE", os.path.join(BASE_DIR, "users.json"))
 
-def get_session():
-    return os.environ.get("SESSION_FILE", os.path.join(BASE_DIR, "session.json"))
-
 def get_log():
     return os.path.join(BASE_DIR, "vault.log")
+
+# Keyring
+KEYRING_SERVICE = "password_manager"
+KEYRING_ACCOUNT = "session"

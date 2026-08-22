@@ -1,59 +1,94 @@
-import json
-import base64
-import src.constants
-from unittest.mock import mock_open, patch
+import pytest
 from cryptography.fernet import Fernet
-from src.session import save_session, load_session, clear_session
 
-def test_save_session_writes_correct_json():
-    username = "testuser"
+from src.session import (
+    clear_session,
+    load_session,
+    save_session,
+)
+
+
+SERVICE_NAME = "password_manager"
+ACCOUNT_NAME = "session"
+
+
+@pytest.mark.unit
+def test_save_session_stores_session_in_keyring(set_test_env):
+    _ = set_test_env
     key = Fernet.generate_key()
-    encoded_key = base64.urlsafe_b64encode(key).decode()
+    save_session("testuser", key)
 
-    with patch("builtins.open", mock_open()), patch("json.dump") as dump:
-        save_session(username, key)
-        dump.assert_called_once()
-        written_data = dump.call_args[0][0]
-        assert written_data["username"] == username
-        assert written_data["fernet_key"] == encoded_key
+    result = load_session()
 
-def test_load_session_reads_and_returns_fernet():
+    assert result is not None
+
+    username, fernet = result
+
+    assert username == "testuser"
+    assert isinstance(fernet, Fernet)
+    assert fernet.decrypt(
+        fernet.encrypt(b"test")
+    ) == b"test"
+
+@pytest.mark.unit
+def test_load_session_reads_session_from_keyring(set_test_env):
+    _ = set_test_env
     key = Fernet.generate_key()
-    encoded_key = base64.urlsafe_b64encode(key).decode()
-    mock_data = {
-        "username": "testuser",
-        "fernet_key": encoded_key
-    }
 
-    with patch("os.path.exists", return_value=True), \
-         patch("builtins.open", mock_open(read_data=json.dumps(mock_data))):
-        result = load_session()
-        assert result is not None
-        username, fernet = result
-        assert username == "testuser"
-        assert isinstance(fernet, Fernet)
+    save_session("testuser", key)
 
-def test_load_session_returns_none_if_file_missing():
-    with patch("os.path.exists", return_value=False):
-        assert load_session() is None
+    result = load_session()
 
-def test_load_session_failure_json_error():
-    mock_file = mock_open(read_data='{"username": "testuser", "fernet_key": "invalid=="')
-    with patch("os.path.exists", return_value=True), \
-         patch("builtins.open", mock_file), \
-         patch("json.load", side_effect=ValueError("Invalid JSON")):
-        
-        result = load_session()
-        assert result is None
-        
-def test_clear_session_removes_file():
-    with patch("os.path.exists", return_value=True), \
-         patch("os.remove") as mock_remove:
-        clear_session()
-        mock_remove.assert_called_once_with(src.constants.get_session())
+    assert result is not None
 
-def test_clear_session_does_nothing_if_no_file():
-    with patch("os.path.exists", return_value=False), \
-         patch("os.remove") as mock_remove:
-        clear_session()
-        mock_remove.assert_not_called()
+    username, fernet = result
+
+    assert username == "testuser"
+    assert isinstance(fernet, Fernet)
+
+    # Verify that the returned Fernet object uses the correct key.
+    test_data = b"secret test data"
+    encrypted = fernet.encrypt(test_data)
+
+    assert fernet.decrypt(encrypted) == test_data
+
+
+@pytest.mark.unit
+def test_load_session_returns_none_if_no_session(set_test_env):
+    _ = set_test_env
+    result = load_session()
+    
+    assert result is None
+
+
+@pytest.mark.unit
+def test_load_session_returns_none_on_invalid_session_data(set_test_env, mock_session_keyring):
+    _ = set_test_env
+
+    mock_session_keyring("invalid json")
+
+    result = load_session()
+
+    assert result is None
+
+@pytest.mark.unit
+def test_clear_session_deletes_keyring_entry(set_test_env):
+    _ = set_test_env
+    key = Fernet.generate_key()
+
+    save_session("testuser", key)
+
+    assert load_session() is not None
+
+    clear_session()
+
+    assert load_session() is None
+
+
+@pytest.mark.unit
+def test_clear_session_handles_missing_session(set_test_env):
+    _ = set_test_env
+
+    clear_session()
+
+    assert load_session() is None
