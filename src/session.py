@@ -56,6 +56,39 @@ def load_session() -> tuple[str, Fernet] | None:
         return None
 
 
+def refresh_session() -> bool:
+    stored_data = keyring.get_password(
+        KEYRING_SERVICE,
+        KEYRING_ACCOUNT,
+    )
+
+    if stored_data is None:
+        logger.info("No session found to refresh.")
+        return False
+
+    try:
+        session_data = json.loads(stored_data)
+
+        session_data["last_activity"] = time.time()
+
+        keyring.set_password(
+            KEYRING_SERVICE,
+            KEYRING_ACCOUNT,
+            json.dumps(session_data),
+        )
+
+        logger.info(
+            f"Session activity refreshed for user: "
+            f"{session_data['username']}"
+        )
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error refreshing session: {e}")
+        return False
+
+
 def clear_session():
     try:
         keyring.delete_password(

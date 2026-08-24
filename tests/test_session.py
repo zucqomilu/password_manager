@@ -7,6 +7,7 @@ from cryptography.fernet import Fernet
 from src.session import (
     clear_session,
     load_session,
+    refresh_session,
     save_session,
 )
 
@@ -156,3 +157,69 @@ def test_load_session_returns_none_after_ttl(set_test_env, test_clock):
     test_clock[0] += 15 * 60
 
     assert load_session() is None
+
+
+@pytest.mark.unit
+def test_refresh_session_returns_false_if_no_session(set_test_env):
+    _ = set_test_env
+    assert refresh_session() is False
+
+
+@pytest.mark.unit
+def test_refresh_session_returns_false_on_invalid_session_data(set_test_env, mock_session_keyring):
+    _ = set_test_env
+    set_session, _ = mock_session_keyring
+
+    set_session("invalid json")
+
+    assert refresh_session() is False
+
+
+@pytest.mark.unit
+def test_refresh_session_preserves_fernet_key(set_test_env, test_clock):
+    _ = set_test_env
+    key = Fernet.generate_key()
+
+    save_session("testuser", key)
+
+    test_clock[0] += 5 * 60
+
+    assert refresh_session() is True
+
+    result = load_session()
+
+    assert result is not None
+
+    username, fernet = result
+
+    assert username == "testuser"
+
+    plaintext = b"important secret"
+    encrypted = fernet.encrypt(plaintext)
+
+    assert fernet.decrypt(encrypted) == plaintext
+
+
+@pytest.mark.unit
+def test_refresh_session_extends_session_ttl(set_test_env, test_clock):
+    _ = set_test_env
+    key = Fernet.generate_key()
+
+    save_session("testuser", key)
+
+    test_clock[0] += 10 * 60
+
+    assert refresh_session() is True
+
+    # 10 minutes after refresh, the total elapsed time from login
+    # is 20 minutes, but only 10 minutes have elapsed since activity.
+    test_clock[0] += 10 * 60
+
+    result = load_session()
+
+    assert result is not None
+
+    username, fernet = result
+
+    assert username == "testuser"
+    assert isinstance(fernet, Fernet)
