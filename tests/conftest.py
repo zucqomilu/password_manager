@@ -49,10 +49,13 @@ def set_test_env(monkeypatch):
 
 @pytest.fixture
 def mock_session_keyring():
-    def _set(data):
+    def set_session(data):
         test_keyring[("password_manager", "session")] = data
 
-    return _set
+    def get_session():
+        return test_keyring.get(("password_manager", "session"))
+
+    return set_session, get_session
 
 
 @pytest.fixture()

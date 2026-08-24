@@ -1,8 +1,11 @@
 import json
 import base64
+import time
+
 import keyring
 from keyring.errors import PasswordDeleteError
 from cryptography.fernet import Fernet
+
 from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE
 from .logger import logger
 
@@ -10,7 +13,8 @@ from .logger import logger
 def save_session(username: str, key: bytes):
     session_data = {
         "username": username,
-        "fernet_key": base64.urlsafe_b64encode(key).decode()
+        "fernet_key": base64.urlsafe_b64encode(key).decode(),
+        "last_activity": time.time()
     }
 
     keyring.set_password(
