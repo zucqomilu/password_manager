@@ -25,6 +25,7 @@ def save_session(username: str, key: bytes):
 
     logger.info(f"Session saved for user: {username}")
 
+
 def load_session() -> tuple[str, Fernet] | None:
     try:
         stored_data = keyring.get_password(
@@ -53,6 +54,7 @@ def load_session() -> tuple[str, Fernet] | None:
         logger.error(f"Error loading session: {e}")
         print(f"Error loading session: {e}")
         return None
+
 
 def clear_session():
     try:

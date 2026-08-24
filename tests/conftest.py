@@ -1,4 +1,4 @@
-import pytest, base64, json, builtins, tempfile, os
+import pytest, base64, json, builtins, tempfile, os, time
 from keyring.errors import PasswordDeleteError
 from src.crypto import derive_key
 from cryptography.fernet import Fernet
@@ -45,6 +45,18 @@ def set_test_env(monkeypatch):
         yield tmpdir
 
     test_keyring.clear()
+
+
+@pytest.fixture
+def test_clock(monkeypatch):
+    current_time = [time.time()]
+
+    monkeypatch.setattr(
+        "src.session.time.time",
+        lambda: current_time[0],
+    )
+
+    return current_time
 
 
 @pytest.fixture

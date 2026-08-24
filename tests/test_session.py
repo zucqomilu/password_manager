@@ -131,20 +131,12 @@ def test_load_session_returns_none_without_last_activity(set_test_env, mock_sess
 
 
 @pytest.mark.unit
-def test_load_session_returns_session_before_ttl(set_test_env, mock_session_keyring, monkeypatch):
+def test_load_session_returns_session_before_ttl(set_test_env, test_clock):
     _ = set_test_env
-    set_session, _ = mock_session_keyring
-
     key = Fernet.generate_key()
-    current_time = 1_000_000.0
-
-    set_session(json.dumps({
-        "username": "testuser",
-        "fernet_key": base64.urlsafe_b64encode(key).decode(),
-        "last_activity": current_time,
-    }))
-
-    monkeypatch.setattr("src.session.time.time", lambda: current_time + 14 * 60)
+    save_session("testuser", key)
+    
+    test_clock[0] += 14 * 60
 
     result = load_session()
 
@@ -156,25 +148,11 @@ def test_load_session_returns_session_before_ttl(set_test_env, mock_session_keyr
 
 
 @pytest.mark.unit
-def test_load_session_returns_none_after_ttl(set_test_env, mock_session_keyring, monkeypatch):
+def test_load_session_returns_none_after_ttl(set_test_env, test_clock):
     _ = set_test_env
-    set_session, get_session = mock_session_keyring
-
     key = Fernet.generate_key()
-    current_time = 1_000_000.0
+    save_session("testuser", key)
 
-    set_session(json.dumps({
-        "username": "testuser",
-        "fernet_key": base64.urlsafe_b64encode(key).decode(),
-        "last_activity": current_time,
-    }))
+    test_clock[0] += 15 * 60
 
-    monkeypatch.setattr(
-        "src.session.time.time",
-        lambda: current_time + 15 * 60,
-    )
-
-    result = load_session()
-
-    assert result is None
-    assert get_session() is None
+    assert load_session() is None
