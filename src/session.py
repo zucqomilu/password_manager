@@ -6,7 +6,7 @@ import keyring
 from keyring.errors import PasswordDeleteError
 from cryptography.fernet import Fernet
 
-from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE
+from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, SESSION_TTL
 from .logger import logger
 
 
@@ -40,6 +40,12 @@ def load_session() -> tuple[str, Fernet] | None:
 
         username = session_data["username"]
         key = base64.urlsafe_b64decode(session_data["fernet_key"])
+        last_activity = session_data["last_activity"]
+
+        if time.time() - last_activity >= SESSION_TTL:
+            clear_session()
+            logger.info("Session expired.")
+            return None
 
         return username, Fernet(key)
 

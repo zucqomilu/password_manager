@@ -16,3 +16,5 @@ def get_log():
 # Keyring
 KEYRING_SERVICE = "password_manager"
 KEYRING_ACCOUNT = "session"
+
+SESSION_TTL = 15 * 60
