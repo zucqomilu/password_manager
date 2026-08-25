@@ -1,4 +1,4 @@
-import os, re
+import os, re, json
 from pathlib import Path
 from src.cli import main
 from src.session import load_session, clear_session
@@ -459,3 +459,21 @@ def test_update_password_and_login_on_existing_label(set_test_env, fernet, capsy
     entry = vault[username][label]
     assert fernet.decrypt(entry["password"].encode()).decode() == new_pass
     assert fernet.decrypt(entry["login"].encode()).decode() == "updated@example.com"
+
+
+def test_e2e_session_activity_is_refreshed(capsys, set_test_env, mock_session_keyring):
+    _ = set_test_env
+    username, password = "refreshuser", "refreshpass"
+
+    register_and_login(username, password, capsys, main)
+
+    _, get_session = mock_session_keyring
+
+    before = json.loads(get_session())["last_activity"]
+
+    main(["list"])
+    capsys.readouterr()
+
+    after = json.loads(get_session())["last_activity"]
+
+    assert after > before

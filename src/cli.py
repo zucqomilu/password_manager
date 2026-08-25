@@ -3,7 +3,7 @@ import getpass
 from .logger import logger
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password
-from .session import load_session, save_session, clear_session
+from .session import load_session, save_session, clear_session, refresh_session
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Password Manager CLI")
@@ -76,6 +76,8 @@ def main(argv=None):
         return
 
     username, fernet = session
+
+    refresh_session()
 
     # === HANDLE USER COMMANDS ===
     if args.command == 'generate':
