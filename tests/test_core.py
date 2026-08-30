@@ -261,3 +261,23 @@ def test_list_labels_filters_multiple_digit_versioned_backups(fernet, capsys, va
         captured = capsys.readouterr()
 
         assert "- github__v10" not in captured.out
+
+
+def test_set_tag_on_existing_label(fernet, valid_vault):
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save:
+
+        result = save_password(
+            "alice",
+            "github",
+            fernet,
+            tags=["development"]
+        )
+
+        assert result is True
+
+        saved_data = mock_save.call_args[0][0]
+        entry = saved_data["alice"]["github"]
+
+        assert "tags" in entry
+        assert "development" in entry["tags"]

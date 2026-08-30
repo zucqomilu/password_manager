@@ -15,7 +15,7 @@ def generate_password(length=16):
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
-def save_password(username, label, fernet, password=None, login=None):
+def save_password(username, label, fernet, password=None, login=None, tags=None):
     logger.info(f"Attempting to save password for '{label}'.")
 
     vault = load_vault()
@@ -64,13 +64,20 @@ def save_password(username, label, fernet, password=None, login=None):
 
     if password:
         existing_entry["password"] = fernet.encrypt(password.encode()).decode()
+        
     if login:
         existing_entry["login"] = fernet.encrypt(login.encode()).decode()
-        
+
+    if tags:
+        existing_entry.setdefault("tags", [])
+        existing_entry["tags"].extend(tags)
+
     vault_data[label] = existing_entry
     save_vault(vault)
+    
     logger.info(f"Credentials saved for '{label}'.")
     print(f"Saved credentials for '{label}'.")
+    
     return True
 
 
