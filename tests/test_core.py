@@ -2,15 +2,18 @@ import logging
 from unittest.mock import patch
 from src.core import generate_password, save_password, get_password, list_labels
 
+
 def test_generate_password():
     password = generate_password()
     assert isinstance(password, str)
     assert len(password) == 16
 
+
 def test_generate_password_length():
     password = generate_password(20)
     assert isinstance(password, str)
     assert len(password) == 20
+
 
 def test_save_password_without_login(fernet):
     with patch("src.core.load_vault", return_value={"alice": {}}), \
@@ -19,6 +22,7 @@ def test_save_password_without_login(fernet):
         assert result is True
         saved = mock_save.call_args[0][0]
         assert "password" in saved["alice"]["github"]
+
 
 def test_save_password_with_login(fernet):
     with patch("src.core.load_vault", return_value={"alice": {}}), \
@@ -29,6 +33,7 @@ def test_save_password_with_login(fernet):
         entry = saved["alice"]["github"]
         assert "password" in entry and "login" in entry
 
+
 def test_save_password_overwrite_prompt_no(caplog, fernet, valid_vault):
     with patch("src.core.load_vault", return_value=valid_vault), \
          patch("src.core.input", return_value='n'), \
@@ -36,6 +41,7 @@ def test_save_password_overwrite_prompt_no(caplog, fernet, valid_vault):
         result = save_password("alice", "github", fernet, "newpass")
         assert result is False
         assert "User cancelled overwrite for 'github'." in caplog.text
+
 
 def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
     valid_vault["alice"]["github"]["password"] = "notbase64==="
@@ -46,6 +52,7 @@ def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
         assert result is False
         assert "Failed to overwrite 'github' due to incorrect master password." in caplog.text
 
+
 def test_save_password_new_label(fernet):
     with patch("src.core.load_vault", return_value={}), \
          patch("src.core.save_vault") as mock_save, \
@@ -55,6 +62,7 @@ def test_save_password_new_label(fernet):
         assert result is True
         mock_save.assert_called_once()
 
+
 def test_save_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("src.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
@@ -62,6 +70,7 @@ def test_save_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fer
         out = capsys.readouterr().out
         assert "Failed to load password vault" in out
         assert "Vault loading failed: returned None." in caplog.text
+
 
 def test_save_password_creates_correct_version_label(fernet, valid_vault):
     with patch("src.core.load_vault", return_value=valid_vault), \
@@ -75,6 +84,7 @@ def test_save_password_creates_correct_version_label(fernet, valid_vault):
         assert "twitter__v2" in saved_data["alice"]  # Next available version
         mock_backup.assert_called_once()
 
+
 def test_save_password_overwrite(fernet, valid_vault):
     with patch("src.core.load_vault", return_value=valid_vault), \
          patch("src.core.save_vault") as mock_save, \
@@ -85,6 +95,7 @@ def test_save_password_overwrite(fernet, valid_vault):
         mock_backup.assert_called_once()
         mock_save.assert_called_once()
 
+
 def test_save_password_user_declines_overwrite(fernet, valid_vault):
     with patch("src.core.load_vault", return_value=valid_vault), \
          patch("src.core.save_vault") as mock_save, \
@@ -94,6 +105,7 @@ def test_save_password_user_declines_overwrite(fernet, valid_vault):
         assert result is False
         mock_save.assert_not_called()
         mock_print.assert_any_call("Operation cancelled.")
+
 
 def test_save_password_overwrite_fails_on_bad_decryption(fernet, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invalid_encrypted_data:newpassword"
@@ -107,6 +119,7 @@ def test_save_password_overwrite_fails_on_bad_decryption(fernet, valid_vault):
         mock_backup.assert_not_called()
         mock_print.assert_any_call("Error: A password already exists for 'github', and the provided master password does not match.")
 
+
 def test_set_login_only(fernet):
     with patch("src.core.load_vault", return_value={"bob": {}}), \
          patch("src.core.save_vault") as mock_save, \
@@ -114,6 +127,7 @@ def test_set_login_only(fernet):
         assert not save_password("bob", "gitlab", login="bob@example.com", fernet=fernet)
         mock_save.assert_not_called()
         mock_print.assert_any_call("Error: Cannot create label 'gitlab' without a password.")
+
 
 def test_set_password_only(fernet):
     with patch("src.core.load_vault", return_value={"bob": {}}), \
@@ -123,6 +137,7 @@ def test_set_password_only(fernet):
         password_encrypted = saved_data["bob"]["gitlab"]["password"]
         assert isinstance(password_encrypted, str)
         assert fernet.decrypt(password_encrypted.encode()).decode() == "mysecretpassword"
+
 
 def test_set_password_and_login(fernet):
     with patch("src.core.load_vault", return_value={"bob": {}}), \
@@ -136,6 +151,7 @@ def test_set_password_and_login(fernet):
         assert isinstance(login_encrypted, str)
         assert fernet.decrypt(login_encrypted.encode()).decode() == "bob@example.com"
 
+
 def test_get_password_success(fernet, capsys, valid_vault):
     with patch("src.core.load_vault", return_value=valid_vault), \
          patch("src.core.pyperclip.copy") as mock_clipboard:
@@ -144,12 +160,14 @@ def test_get_password_success(fernet, capsys, valid_vault):
         assert "supersecurepass1" in captured.out
         mock_clipboard.assert_called_once()
 
+
 def test_get_password_with_login(capsys, fernet, valid_vault):
     with patch("src.core.load_vault", return_value=valid_vault), patch("pyperclip.copy"):
         get_password("alice", "github", fernet, show=True)
         out = capsys.readouterr().out
         assert "Password: supersecurepass1" in out
         assert "Login: alice@example.com" in out
+
 
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("src.core.load_vault", return_value=None), \
@@ -159,6 +177,7 @@ def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fern
         assert "Failed to load password vault" in out
         assert "Vault loading failed: returned None." in caplog.text
 
+
 def test_get_password_invalid_decryption(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invaliddata"
     with patch("src.core.load_vault", return_value=valid_vault):
@@ -166,11 +185,13 @@ def test_get_password_invalid_decryption(fernet, capsys, valid_vault):
         captured = capsys.readouterr()
         assert "Incorrect master password" in captured.out
 
+
 def test_get_password_label_not_found(fernet, valid_vault):
     with patch("src.core.load_vault", return_value=valid_vault), \
          patch("builtins.print") as mock_print:
         get_password("alice", "nonexistent", fernet)
         mock_print.assert_any_call("No password found for 'nonexistent'.")
+
 
 def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invaliddata"
@@ -180,11 +201,13 @@ def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
         assert "- twitter" in captured.out
         assert "- github" not in captured.out
 
+
 def test_list_labels_empty_user_vault(fernet):
     with patch("src.core.load_vault", return_value={"testuser": {}}), \
          patch("builtins.print") as mock_print:
         list_labels("testuser", fernet)
         mock_print.assert_any_call("No passwords found for this user.")
+
 
 def test_list_labels_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("src.core.load_vault", return_value=None), \
@@ -193,3 +216,48 @@ def test_list_labels_logs_and_prints_on_vault_load_failure(capsys, caplog, ferne
         out = capsys.readouterr().out
         assert "Failed to load password vault" in out
         assert "Vault loading failed: returned None." in caplog.text
+
+
+def test_list_labels_filters_versioned_backups(fernet, capsys, valid_vault):
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet)
+
+        captured = capsys.readouterr()
+
+        assert "- github" in captured.out
+        assert "- twitter" in captured.out
+        assert "- twitter__v1" not in captured.out
+
+
+def test_list_labels_keeps_labels_with_similar_names(fernet, capsys, valid_vault):
+    valid_vault["alice"]["my__vpn"] = {
+        "password": fernet.encrypt(b"vpnpassword").decode()
+    }
+    valid_vault["alice"]["github__version"] = {
+        "password": fernet.encrypt(b"versionpassword").decode()
+    }
+    valid_vault["alice"]["github__vabc"] = {
+        "password": fernet.encrypt(b"abpassword").decode()
+    }
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet)
+
+        captured = capsys.readouterr()
+
+        assert "- my__vpn" in captured.out
+        assert "- github__version" in captured.out
+        assert "- github__vabc" in captured.out
+
+
+def test_list_labels_filters_multiple_digit_versioned_backups(fernet, capsys, valid_vault):
+    valid_vault["alice"]["github__v10"] = {
+        "password": fernet.encrypt(b"oldpassword").decode()
+    }
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet)
+
+        captured = capsys.readouterr()
+
+        assert "- github__v10" not in captured.out

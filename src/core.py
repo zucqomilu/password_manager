@@ -1,12 +1,19 @@
+import re
 import string
 import secrets
 import pyperclip
 from .logger import logger
 from .storage import load_vault, backup_vault, save_vault
 
+
+def is_versioned_backup(label):
+    return re.search(r"__v\d+$", label) is not None
+
+
 def generate_password(length=16):
     chars = string.ascii_letters + string.digits + string.punctuation
     return ''.join(secrets.choice(chars) for _ in range(length))
+
 
 def save_password(username, label, fernet, password=None, login=None):
     logger.info(f"Attempting to save password for '{label}'.")
@@ -66,6 +73,7 @@ def save_password(username, label, fernet, password=None, login=None):
     print(f"Saved credentials for '{label}'.")
     return True
 
+
 def get_password(username, label, fernet, show=False):
     logger.info(f"Attempting to retrieve password for '{label}'.")
     
@@ -98,6 +106,7 @@ def get_password(username, label, fernet, show=False):
         logger.info(f"Label '{label}' not found in vault.")
         print(f"No password found for '{label}'.")
 
+
 def list_labels(username, fernet):
     logger.info("Listing all stored password labels.")
     
@@ -115,6 +124,9 @@ def list_labels(username, fernet):
 
     print("Stored labels:")
     for label, entry in vault_user.items():
+        if is_versioned_backup(label):
+            continue
+
         try:
             has_login = "login" in entry
             suffix = " (with login)" if has_login else ""
