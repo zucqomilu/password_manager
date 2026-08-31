@@ -77,4 +77,12 @@ def validate_vault(data) -> bool:
             if "login" in entry and not is_valid_base64(entry["login"]):
                 logger.error(f"Vault entry '{username}:{label}' has invalid base64 login.")
                 return False
+
+            if "tags" in entry:
+                if not isinstance(entry["tags"], list) or not all(
+                        isinstance(tag, str) for tag in entry["tags"]
+                ):
+                    logger.error(f"Vault entry '{username}:{label}' has invalid tags format.")
+                    return False
+
     return True

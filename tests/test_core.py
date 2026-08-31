@@ -281,3 +281,43 @@ def test_set_tag_on_existing_label(fernet, valid_vault):
 
         assert "tags" in entry
         assert "development" in entry["tags"]
+
+
+def test_set_tag_preserves_existing_tags(fernet, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save:
+
+        result = save_password(
+            "alice",
+            "github",
+            fernet,
+            tags=["business"]
+        )
+
+        assert result is True
+
+        saved_data = mock_save.call_args[0][0]
+        tags = saved_data["alice"]["github"]["tags"]
+
+        assert tags == ["development", "business"]
+
+
+def test_set_multiple_tags(fernet, valid_vault):
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save:
+
+        result = save_password(
+            "alice",
+            "github",
+            fernet,
+            tags=["development", "business", "personal"]
+        )
+
+        assert result is True
+
+        saved_data = mock_save.call_args[0][0]
+        tags = saved_data["alice"]["github"]["tags"]
+
+        assert tags == ["development", "business", "personal"]
