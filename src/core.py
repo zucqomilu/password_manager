@@ -70,7 +70,10 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
 
     if tags:
         existing_entry.setdefault("tags", [])
-        existing_entry["tags"].extend(tags)
+
+        for tag in tags:
+            if tag not in existing_entry["tags"]:
+                existing_entry["tags"].append(tag)
 
     vault_data[label] = existing_entry
     save_vault(vault)

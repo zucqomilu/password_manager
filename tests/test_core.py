@@ -321,3 +321,24 @@ def test_set_multiple_tags(fernet, valid_vault):
         tags = saved_data["alice"]["github"]["tags"]
 
         assert tags == ["development", "business", "personal"]
+
+
+def test_set_tag_does_not_duplicate_existing_tag(fernet, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save:
+
+        result = save_password(
+            "alice",
+            "github",
+            fernet,
+            tags=["development"]
+        )
+
+        assert result is True
+
+        saved_data = mock_save.call_args[0][0]
+        tags = saved_data["alice"]["github"]["tags"]
+
+        assert tags == ["development"]
