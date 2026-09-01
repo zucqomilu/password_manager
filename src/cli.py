@@ -41,7 +41,8 @@ def main(argv=None):
     get_parser.add_argument('--show', action='store_true', help='Show password in terminal')
 
     # === LIST ===
-    subparsers.add_parser('list', help='List all saved password labels')
+    list_parser = subparsers.add_parser('list', help='List all saved password labels')
+    list_parser.add_argument('--tag', help='Only list labels with this tag')
 
     args = parser.parse_args(argv)
 
@@ -95,6 +96,6 @@ def main(argv=None):
     elif args.command == 'get':
         get_password(username, args.label, fernet, show=args.show)
     elif args.command == 'list':
-        list_labels(username, fernet)
+        list_labels(username, fernet, tag=args.tag)
     else:
         parser.print_help()

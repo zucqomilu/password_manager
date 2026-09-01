@@ -61,7 +61,7 @@ def test_set_command_success():
          patch('src.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'set', 'mylabel', '--password', 'mypassword', '--login', 'testuser@example.com'])
-        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='mypassword', login='testuser@example.com')
+        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='mypassword', login='testuser@example.com', tags=None)
 
 
 def test_set_command_failure(capsys):
@@ -71,7 +71,7 @@ def test_set_command_failure(capsys):
         run_cli_with_args(['prog', 'set', 'mylabel'])
         mock_save_password.assert_not_called()
         captured = capsys.readouterr()
-        assert "Error: You must specify at least --password or --login." in captured.out
+        assert "Error: You must specify at least --password or --login or --tags." in captured.out
 
 
 def test_get_command():
@@ -87,7 +87,7 @@ def test_list_command():
          patch('src.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'list'])
-        mock_list_labels.assert_called_once_with('testuser', b'fernet')
+        mock_list_labels.assert_called_once_with('testuser', b'fernet', tag=None)
 
 
 def test_no_session_for_protected_commands(capfd):
@@ -111,4 +111,18 @@ def test_set_command_with_tag():
             password=None,
             login=None,
             tags=['droppshipping']
+        )
+
+
+def test_list_command_with_tag():
+    with patch('src.cli.load_session') as mock_load_session, \
+         patch('src.cli.list_labels') as mock_list_labels:
+        mock_load_session.return_value = ('testuser', b'fernet')
+
+        run_cli_with_args(['prog', 'list', '--tag', 'droppshipping'])
+
+        mock_list_labels.assert_called_once_with(
+            'testuser',
+            b'fernet',
+            tag='droppshipping'
         )

@@ -117,7 +117,7 @@ def get_password(username, label, fernet, show=False):
         print(f"No password found for '{label}'.")
 
 
-def list_labels(username, fernet):
+def list_labels(username, fernet, tag=None):
     logger.info("Listing all stored password labels.")
     
     vault = load_vault()
