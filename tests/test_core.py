@@ -368,3 +368,55 @@ def test_set_tag_does_not_create_version_backup(fernet, valid_vault):
 
         mock_backup.assert_not_called()
         mock_input.assert_not_called()
+
+
+def test_list_labels_filters_by_tag(fernet, capsys, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+    valid_vault["alice"]["twitter"]["tags"] = ["social"]
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet, tag="development")
+
+    captured = capsys.readouterr()
+
+    assert "- github" in captured.out
+    assert "- twitter" not in captured.out
+
+
+def test_list_labels_returns_multiple_labels_with_tag(fernet, capsys, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development"]
+    valid_vault["alice"]["twitter"]["tags"] = ["development", "social"]
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet, tag="development")
+
+    captured = capsys.readouterr()
+
+    assert "- github" in captured.out
+    assert "- twitter" in captured.out
+
+
+def test_list_labels_no_matching_tag(fernet, capsys, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["work"]
+    valid_vault["alice"]["twitter"]["tags"] = ["social"]
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet, tag="development")
+
+    captured = capsys.readouterr()
+
+    assert "No passwords found with tag 'development'." in captured.out
+    assert "- github" not in captured.out
+    assert "- twitter" not in captured.out
+
+
+def test_list_labels_tag_filter_excludes_untagged_labels(fernet, capsys, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development"]
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet, tag="development")
+
+    captured = capsys.readouterr()
+
+    assert "- github" in captured.out
+    assert "- twitter" not in captured.out

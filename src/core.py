@@ -132,9 +132,15 @@ def list_labels(username, fernet, tag=None):
         print("No passwords found for this user.")
         return
 
+    found = False
+
     print("Stored labels:")
+
     for label, entry in vault_user.items():
         if is_versioned_backup(label):
+            continue
+
+        if tag is not None and tag not in entry.get("tags", []):
             continue
 
         try:
@@ -142,5 +148,9 @@ def list_labels(username, fernet, tag=None):
             suffix = " (with login)" if has_login else ""
             fernet.decrypt(entry["password"].encode())
             print(f"- {label}{suffix}")
+            found = True
         except:
             continue
+
+    if tag is not None and not found:
+        print(f"No passwords found with tag '{tag}'.")
