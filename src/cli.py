@@ -33,6 +33,7 @@ def main(argv=None):
     set_parser.add_argument('label', help='Label to set credentials for')
     set_parser.add_argument('--password', help='Password to set (optional)')
     set_parser.add_argument('--login', help='Login (email/username) to set (optional)')
+    set_parser.add_argument('--tag', action='append', dest='tags', help='Tag to add to the label')
 
     # === GET ===
     get_parser = subparsers.add_parser('get', help='Get a password by label')
@@ -86,11 +87,11 @@ def main(argv=None):
             logger.info(f"Generated new password for '{args.label}' with length {args.length}.")
             print(f"Generated password: {pwd}")
     elif args.command == "set":
-        if not args.password and not args.login:
-            logger.error(f"You must run with eather args --password or --login.")
-            print("Error: You must specify at least --password or --login.")
+        if not args.password and not args.login and not args.tags:
+            logger.error(f"You must run with eather args --password or --login or --tags.")
+            print("Error: You must specify at least --password or --login or --tags.")
             return
-        save_password(username, args.label, fernet, password=args.password, login=args.login)
+        save_password(username, args.label, fernet, password=args.password, login=args.login, tags=args.tags)
     elif args.command == 'get':
         get_password(username, args.label, fernet, show=args.show)
     elif args.command == 'list':

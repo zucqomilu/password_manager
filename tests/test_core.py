@@ -342,3 +342,29 @@ def test_set_tag_does_not_duplicate_existing_tag(fernet, valid_vault):
         tags = saved_data["alice"]["github"]["tags"]
 
         assert tags == ["development"]
+
+
+def test_set_tag_does_not_create_version_backup(fernet, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save, \
+         patch("src.core.backup_vault") as mock_backup, \
+         patch("src.core.input") as mock_input:
+
+        result = save_password("alice", "github", fernet, tags=["droppshipping"])
+
+        assert result is True
+
+        saved_data = mock_save.call_args[0][0]
+        github = saved_data["alice"]
+
+        assert "github" in github
+        assert "github__v1" not in github
+        assert github["github"]["tags"] == [
+            "development",
+            "droppshipping"
+        ]
+
+        mock_backup.assert_not_called()
+        mock_input.assert_not_called()
