@@ -12,6 +12,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * Secure password generation using Python's `secrets` module
 * Password retrieval and clipboard integration
 * Password/login management by label
+* Tag-based password organization and filtering
 * Multiple users supported
 * Automatic vault backups when overwriting passwords
 * Session persistence through the operating system's keyring
@@ -90,7 +91,11 @@ A vault entry has the following logical structure:
     "username": {
         "label": {
             "password": "encrypted-password",
-            "login": "encrypted-login"
+            "login": "encrypted-login",
+            "tags": [
+                "not-encrypted",
+                "not-encrypted"
+            ]
         }
     }
 }
@@ -100,10 +105,14 @@ For example:
 
 ```json
 {
-    "jonathan": {
-        "router.asus": {
+    "steve": {
+        "github.com": {
             "password": "encrypted-value",
-            "login": "encrypted-value"
+            "login": "encrypted-value",
+            "tags": [
+                "personal",
+                "important"
+            ]
         }
     }
 }
@@ -170,10 +179,14 @@ Example:
 
 ```json
 {
-    "jonathan": {
-        "router.asus": {
+    "steve": {
+        "github.com": {
             "password": "...",
-            "login": "..."
+            "login": "...",
+            "tags": [
+                "...",
+                "..."
+            ]
         }
     }
 }
@@ -351,6 +364,42 @@ If a password already exists for the label, the application asks for confirmatio
 
 The previous encrypted password is retained as a versioned entry and the vault is backed up.
 
+Changing only the login does not create a versioned password entry or vault backup.
+
+### Tags
+
+Password entries can be assigned tags to make it easier to organize and filter related accounts. Tags are currently stored as plaintext metadata in the vault.
+
+Add a tag to an existing label with:
+
+```bash
+python main.py set --tag dropshipping ebay.com
+```
+
+Tags can be added without changing the existing password or login information. Adding a tag does **not** create a versioned backup of the password entry.
+
+To list only labels containing a specific tag:
+
+```bash
+python main.py list --tag dropshipping
+```
+
+For example:
+
+```text
+Stored labels:
+- ebay.com (with login)
+```
+
+If no labels have the specified tag, the command reports:
+
+```text
+Stored labels:
+No passwords found with tag 'dropshipping'.
+```
+
+Tags are additive, so adding a new tag does not replace existing tags. Duplicate tags are not added.
+
 ### Get a password
 
 Retrieve a password:
@@ -377,6 +426,12 @@ List all stored password labels:
 
 ```bash
 python main.py list
+```
+
+To filter labels by tag:
+
+```bash
+python main.py list --tag dropshipping
 ```
 
 Example:
@@ -552,6 +607,7 @@ The project is actively being developed. Current limitations include:
 * No secure remote backup mechanism
 * No graphical user interface
 * JSON is currently used as the persistent storage format
+* Tags are stored as plaintext metadata and are not encrypted
 * Clipboard contents are not automatically cleared by the application
 * Command-line password arguments are available for scripting
 * The cryptographic parameters and security architecture may require further review before production use
@@ -560,7 +616,7 @@ The project is actively being developed. Current limitations include:
 
 The project is currently under active development.
 
-Recent development has focused on replacing disk-based session caching with operating-system keyring storage and introducing session expiration.
+Recent development has focused on replacing disk-based session caching with operating-system keyring storage, introducing session expiration, and adding tag-based organization and filtering for password entries.
 
 The previous `session.json` workflow has been removed from normal application operation.
 
