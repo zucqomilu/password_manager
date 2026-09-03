@@ -373,10 +373,20 @@ Password entries can be assigned tags to make it easier to organize and filter r
 Add a tag to an existing label with:
 
 ```bash
-python main.py set --tag dropshipping ebay.com
+python main.py set ebay.com --tag dropshipping
+```
+
+Multiple tags can be added to the same label by repeating the `--tag` option:
+
+```bash
+python main.py set ebay.com \
+    --tag dropshipping \
+    --tag ecommerce
 ```
 
 Tags can be added without changing the existing password or login information. Adding a tag does **not** create a versioned backup of the password entry.
+
+Tags are additive, so adding a new tag does not replace existing tags. Duplicate tags are not added.
 
 To list only labels containing a specific tag:
 
@@ -391,6 +401,35 @@ Stored labels:
 - ebay.com (with login)
 ```
 
+Multiple tags can be supplied to `list`:
+
+```bash
+python main.py list --tag dropshipping ecommerce
+```
+
+When multiple tags are specified, a label must contain **all** of the requested tags to be included in the results.
+
+For example, given:
+
+```text
+ebay.com       -> dropshipping, ecommerce
+amazon.com     -> dropshipping
+github.com     -> development, personal
+```
+
+the following command:
+
+```bash
+python main.py list --tag dropshipping ecommerce
+```
+
+returns only:
+
+```text
+Stored labels:
+- ebay.com
+```
+
 If no labels have the specified tag, the command reports:
 
 ```text
@@ -398,7 +437,12 @@ Stored labels:
 No passwords found with tag 'dropshipping'.
 ```
 
-Tags are additive, so adding a new tag does not replace existing tags. Duplicate tags are not added.
+When multiple tags produce no matches, the command reports:
+
+```text
+Stored labels:
+No passwords found with tags: dropshipping, ecommerce.
+```
 
 ### Get a password
 
@@ -428,11 +472,19 @@ List all stored password labels:
 python main.py list
 ```
 
-To filter labels by tag:
+To filter labels by a single tag:
 
 ```bash
 python main.py list --tag dropshipping
 ```
+
+To filter labels by multiple tags:
+
+```bash
+python main.py list --tag dropshipping ecommerce
+```
+
+When multiple tags are supplied, only labels containing **all** requested tags are displayed.
 
 Example:
 
@@ -527,7 +579,7 @@ Run the complete test suite with:
 pytest
 ```
 
-The current test suite contains **152 tests**.
+The current test suite contains **175 tests**.
 
 Coverage can be generated with:
 
