@@ -117,7 +117,7 @@ def get_password(username, label, fernet, show=False):
         print(f"No password found for '{label}'.")
 
 
-def list_labels(username, fernet, tag=None):
+def list_labels(username, fernet, tags=None):
     logger.info("Listing all stored password labels.")
     
     vault = load_vault()
@@ -140,7 +140,7 @@ def list_labels(username, fernet, tag=None):
         if is_versioned_backup(label):
             continue
 
-        if tag is not None and tag not in entry.get("tags", []):
+        if tags and not all(tag in entry.get("tags", []) for tag in tags):
             continue
 
         try:
@@ -152,5 +152,8 @@ def list_labels(username, fernet, tag=None):
         except:
             continue
 
-    if tag is not None and not found:
-        print(f"No passwords found with tag '{tag}'.")
+    if tags is not None and not found:
+        if len(tags) == 1:
+            print(f"No passwords found with tag '{tags[0]}'.")
+        else:
+            print(f"No passwords found with tags: {', '.join(tags)}.")

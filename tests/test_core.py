@@ -375,7 +375,7 @@ def test_list_labels_filters_by_tag(fernet, capsys, valid_vault):
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
 
     with patch("src.core.load_vault", return_value=valid_vault):
-        list_labels("alice", fernet, tag="development")
+        list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
 
@@ -388,7 +388,7 @@ def test_list_labels_returns_multiple_labels_with_tag(fernet, capsys, valid_vaul
     valid_vault["alice"]["twitter"]["tags"] = ["development", "social"]
 
     with patch("src.core.load_vault", return_value=valid_vault):
-        list_labels("alice", fernet, tag="development")
+        list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
 
@@ -401,7 +401,7 @@ def test_list_labels_no_matching_tag(fernet, capsys, valid_vault):
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
 
     with patch("src.core.load_vault", return_value=valid_vault):
-        list_labels("alice", fernet, tag="development")
+        list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
 
@@ -414,9 +414,33 @@ def test_list_labels_tag_filter_excludes_untagged_labels(fernet, capsys, valid_v
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
     with patch("src.core.load_vault", return_value=valid_vault):
-        list_labels("alice", fernet, tag="development")
+        list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
 
     assert "- github" in captured.out
     assert "- twitter" not in captured.out
+
+
+def test_list_labels_filters_by_multiple_tags(fernet, capsys, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+    valid_vault["alice"]["twitter"]["tags"] = ["development", "social"]
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet, tags=["development", "work"])
+
+    captured = capsys.readouterr()
+    assert "- github" in captured.out
+    assert "- twitter" not in captured.out
+
+
+def test_list_labels_no_matching_multiple_tags(fernet, capsys, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["work"]
+    valid_vault["alice"]["twitter"]["tags"] = ["social"]
+
+    with patch("src.core.load_vault", return_value=valid_vault):
+        list_labels("alice", fernet, tags=["development", "business"])
+
+    captured = capsys.readouterr()
+
+    assert "No passwords found with tags: development, business." in captured.out

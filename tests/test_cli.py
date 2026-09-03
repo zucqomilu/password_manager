@@ -87,7 +87,7 @@ def test_list_command():
          patch('src.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'list'])
-        mock_list_labels.assert_called_once_with('testuser', b'fernet', tag=None)
+        mock_list_labels.assert_called_once_with('testuser', b'fernet', tags=None)
 
 
 def test_no_session_for_protected_commands(capfd):
@@ -124,5 +124,19 @@ def test_list_command_with_tag():
         mock_list_labels.assert_called_once_with(
             'testuser',
             b'fernet',
-            tag='droppshipping'
+            tags=['droppshipping']
+        )
+
+
+def test_list_command_with_multiple_tags():
+    with patch('src.cli.load_session') as mock_load_session, \
+         patch('src.cli.list_labels') as mock_list_labels:
+        mock_load_session.return_value = ('testuser', b'fernet')
+
+        run_cli_with_args(['prog', 'list', '--tag', 'droppshipping', 'economy'])
+
+        mock_list_labels.assert_called_once_with(
+            'testuser',
+            b'fernet',
+            tags=['droppshipping', 'economy']
         )
