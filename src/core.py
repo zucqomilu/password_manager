@@ -157,3 +157,34 @@ def list_labels(username, fernet, tags=None):
             print(f"No passwords found with tag '{tags[0]}'.")
         else:
             print(f"No passwords found with tags: {', '.join(tags)}.")
+
+
+def remove_tags(username, label, tags):
+    vault = load_vault()
+
+    if vault is None:
+        print("Failed to load password vault. The vault may be corrupted or unreadable.")
+        logger.error("Vault loading failed: returned None.")
+        return
+
+    if label not in vault[username]:
+        print(f"Password label '{label}' not found.")
+        logger.warning("Password label '%s' not found.", label)
+        return
+
+    entry = vault[username][label]
+    existing_tags = entry.get("tags", [])
+    removed = False
+
+    for tag in tags:
+        if tag in existing_tags:
+            existing_tags.remove(tag)
+            removed = True
+
+    if not removed:
+        return
+
+    if not existing_tags:
+        entry.pop("tags", None)
+
+    save_vault(vault)

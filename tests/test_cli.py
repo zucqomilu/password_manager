@@ -140,3 +140,32 @@ def test_list_command_with_multiple_tags():
             b'fernet',
             tags=['droppshipping', 'economy']
         )
+
+
+def test_remove_command_with_tag():
+    with patch('src.cli.load_session') as mock_load_session, \
+         patch('src.cli.remove_tags') as mock_remove_tags:
+        mock_load_session.return_value = ('testuser', b'fernet')
+
+        run_cli_with_args(['prog', 'remove', 'github', '--tag', 'development'])
+
+        mock_remove_tags.assert_called_once_with(
+            'testuser',
+            'github',
+            tags=['development']
+        )
+
+
+def test_remove_command_with_multiple_tags():
+    with patch('src.cli.load_session') as mock_load_session, \
+         patch('src.cli.remove_tags') as mock_remove_tags:
+
+        mock_load_session.return_value = ('testuser', b'fernet')
+
+        run_cli_with_args(['prog', 'remove', 'github', '--tag', 'development', 'work'])
+
+        mock_remove_tags.assert_called_once_with(
+            'testuser',
+            'github',
+            tags=['development', 'work']
+        )

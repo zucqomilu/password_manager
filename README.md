@@ -12,7 +12,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * Secure password generation using Python's `secrets` module
 * Password retrieval and clipboard integration
 * Password/login management by label
-* Tag-based password organization and filtering
+* Tag-based password organization, filtering, and removal
 * Multiple users supported
 * Automatic vault backups when overwriting passwords
 * Session persistence through the operating system's keyring
@@ -204,6 +204,8 @@ Backups use the following naming format:
 vault_backup_YYYYMMDD_HHMMSS.json
 ```
 
+Removing or adding tags does **not** create a versioned password entry or vault backup.
+
 ### `vault.log`
 
 Application logging is written to `vault.log`.
@@ -265,6 +267,7 @@ logout
 generate
 set
 get
+remove
 list
 ```
 
@@ -370,6 +373,8 @@ Changing only the login does not create a versioned password entry or vault back
 
 Password entries can be assigned tags to make it easier to organize and filter related accounts. Tags are currently stored as plaintext metadata in the vault.
 
+#### Add tags
+
 Add a tag to an existing label with:
 
 ```bash
@@ -387,6 +392,8 @@ python main.py set ebay.com \
 Tags can be added without changing the existing password or login information. Adding a tag does **not** create a versioned backup of the password entry.
 
 Tags are additive, so adding a new tag does not replace existing tags. Duplicate tags are not added.
+
+#### Filter by tags
 
 To list only labels containing a specific tag:
 
@@ -443,6 +450,51 @@ When multiple tags produce no matches, the command reports:
 Stored labels:
 No passwords found with tags: dropshipping, ecommerce.
 ```
+
+#### Remove tags
+
+A tag can be removed from an existing password label with:
+
+```bash
+python main.py remove github --tag development
+```
+
+Multiple tags can be removed in a single operation:
+
+```bash
+python main.py remove github --tag development work
+```
+
+Removing tags does not modify the password or login associated with the label.
+
+Removing tags also does **not** create a versioned password entry or vault backup.
+
+If the final tag is removed from a label, the `tags` field is removed from the vault entry entirely.
+
+For example, an entry containing:
+
+```json
+{
+    "password": "encrypted-value",
+    "login": "encrypted-value",
+    "tags": [
+        "development"
+    ]
+}
+```
+
+becomes:
+
+```json
+{
+    "password": "encrypted-value",
+    "login": "encrypted-value"
+}
+```
+
+If a requested tag does not exist, it is ignored. The vault is only saved when an actual change is made.
+
+Labels that do not contain a `tags` field are supported for backwards compatibility.
 
 ### Get a password
 
@@ -579,7 +631,7 @@ Run the complete test suite with:
 pytest
 ```
 
-The current test suite contains **175 tests**.
+The current test suite contains **187 tests**.
 
 Coverage can be generated with:
 
@@ -590,8 +642,8 @@ pytest --cov=src --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-412 statements
-412 statements covered
+463 statements
+463 statements covered
 100% coverage
 ```
 
@@ -668,7 +720,7 @@ The project is actively being developed. Current limitations include:
 
 The project is currently under active development.
 
-Recent development has focused on replacing disk-based session caching with operating-system keyring storage, introducing session expiration, and adding tag-based organization and filtering for password entries.
+Recent development has focused on replacing disk-based session caching with operating-system keyring storage, introducing session expiration, and adding tag-based organization, filtering, and removal for password entries.
 
 The previous `session.json` workflow has been removed from normal application operation.
 

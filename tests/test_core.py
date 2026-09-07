@@ -1,6 +1,6 @@
 import logging
 from unittest.mock import patch
-from src.core import generate_password, save_password, get_password, list_labels
+from src.core import generate_password, save_password, get_password, list_labels, remove_tags
 
 
 def test_generate_password():
@@ -444,3 +444,135 @@ def test_list_labels_no_matching_multiple_tags(fernet, capsys, valid_vault):
     captured = capsys.readouterr()
 
     assert "No passwords found with tags: development, business." in captured.out
+
+
+def test_remove_tags_removes_existing_tag(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development"])
+
+    assert valid_vault["alice"]["github"]["tags"] == ["work"]
+    mock_save_vault.assert_called_once_with(valid_vault)
+
+
+def test_remove_tags_handles_vault_load_failure(capsys):
+    with patch("src.core.load_vault", return_value=None), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development"])
+
+    captured = capsys.readouterr()
+
+    assert "Failed to load password vault." in captured.out
+    mock_save_vault.assert_not_called()
+
+
+def test_remove_tags_preserves_password_and_login(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+
+    original_password = valid_vault["alice"]["github"]["password"]
+    original_login = valid_vault["alice"]["github"]["login"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development"])
+
+    entry = valid_vault["alice"]["github"]
+
+    assert entry["password"] == original_password
+    assert entry["login"] == original_login
+    assert entry["tags"] == ["work"]
+
+    mock_save_vault.assert_called_once_with(valid_vault)
+
+
+def test_remove_tags_removes_multiple_tags(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work", "personal"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development", "personal"])
+
+    assert valid_vault["alice"]["github"]["tags"] == ["work"]
+    mock_save_vault.assert_called_once_with(valid_vault)
+
+
+def test_remove_tags_removes_tags_field_when_last_tag_removed(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development"])
+
+    entry = valid_vault["alice"]["github"]
+
+    assert "tags" not in entry
+    mock_save_vault.assert_called_once_with(valid_vault)
+
+
+def test_remove_tags_handles_label_without_tags(valid_vault):
+    valid_vault["alice"]["github"].pop("tags", None)
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development"])
+
+    assert "tags" not in valid_vault["alice"]["github"]
+    mock_save_vault.assert_not_called()
+    
+
+def test_remove_tags_does_not_save_when_tag_does_not_exist(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["personal"])
+
+    assert valid_vault["alice"]["github"]["tags"] == ["development", "work"]
+    mock_save_vault.assert_not_called()
+
+
+def test_remove_tags_removes_existing_tags_and_ignores_missing_tags(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work", "personal"]
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development", "nonexistent"])
+
+    assert valid_vault["alice"]["github"]["tags"] == ["work", "personal"]
+    mock_save_vault.assert_called_once_with(valid_vault)
+
+
+def test_remove_tags_handles_nonexistent_label(valid_vault, capsys):
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "nonexistent", tags=["development"])
+
+    captured = capsys.readouterr()
+
+    assert "Password label 'nonexistent' not found." in captured.out
+    mock_save_vault.assert_not_called()
+
+
+def test_remove_tags_does_not_create_password_backup(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+
+    original_labels = set(valid_vault["alice"])
+
+    with patch("src.core.load_vault", return_value=valid_vault), \
+         patch("src.core.save_vault") as mock_save_vault:
+
+        remove_tags("alice", "github", tags=["development"])
+
+    assert set(valid_vault["alice"]) == original_labels
+    mock_save_vault.assert_called_once_with(valid_vault)
