@@ -56,3 +56,15 @@ Key behaviors that span files:
 - `test_clock` freezes `src.session.time.time` for testing TTL expiry. `mock_session_keyring` reads and writes the raw session entry.
 - `vault.log` always goes to the repo root because `get_log()` has no override. `src/logger.py` is excluded from coverage in `.coveragerc`.
 - E2E tests drive `src.cli.main([...])` with `--username`/`--password` flags and assert on `capsys` output.
+
+## Scope of convention changes
+
+When a feature or fix touches a function or file, bring that specific code toward the global conventions as part of the change. Don't refactor nearby code the task doesn't touch. Don't widen the scope to clean up things that weren't asked about.
+
+## Security-sensitive code
+
+This is a password manager. Take extra care with any code that touches encryption, key derivation, credential storage, authentication or the keyring session (mainly `crypto.py`, `user.py`, `session.py`, `storage.py` and the encrypt/decrypt paths in `core.py`).
+
+- Never reduce security to satisfy a style convention.
+- Flag every change to this code clearly, and explain the security reasoning before it's approved, even for small edits.
+- Never log, print or include secrets, passwords, keys or the master password in any output, test fixture or commit.
