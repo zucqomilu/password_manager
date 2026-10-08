@@ -1,6 +1,6 @@
 import pytest
 
-from password_manager.constants import get_data_dir
+from password_manager.constants import get_data_dir, get_vault
 
 
 # Keep a PM_DATA_DIR exported in the developer's shell from leaking into these tests
@@ -41,3 +41,10 @@ def test_get_data_dir_honors_pm_data_dir_override(monkeypatch):
     monkeypatch.setenv("PM_DATA_DIR", "/custom/pm")
     monkeypatch.setenv("XDG_DATA_HOME", "/xdg/data")
     assert get_data_dir() == "/custom/pm"
+
+
+@pytest.mark.unit
+def test_get_vault_resolves_vault_json_inside_data_dir(monkeypatch):
+    monkeypatch.delenv("VAULT_FILE", raising=False)
+    monkeypatch.setenv("PM_DATA_DIR", "/custom/pm")
+    assert get_vault() == "/custom/pm/vault.json"

@@ -10,9 +10,9 @@ def get_data_home():
 def get_data_dir():
     return os.environ.get("PM_DATA_DIR") or os.path.join(get_data_home(), "password_manager")
 
-# Allow environment variable overrides for testability; fallback to project paths
+# Allow environment variable overrides for testability; fallback to default paths
 def get_vault():
-    return os.environ.get("VAULT_FILE", os.path.join(BASE_DIR, "vault.json"))
+    return os.environ.get("VAULT_FILE", os.path.join(get_data_dir(), "vault.json"))
 
 def get_users():
     return os.environ.get("USERS_FILE", os.path.join(BASE_DIR, "users.json"))
