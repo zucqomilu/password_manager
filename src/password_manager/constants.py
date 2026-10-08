@@ -10,6 +10,9 @@ def get_data_home():
 def get_data_dir():
     return os.environ.get("PM_DATA_DIR") or os.path.join(get_data_home(), "password_manager")
 
+def ensure_data_dir():
+    os.makedirs(get_data_dir(), mode=0o700, exist_ok=True)
+
 # Allow environment variable overrides for testability; fallback to default paths
 def get_vault():
     return os.environ.get("VAULT_FILE", os.path.join(get_data_dir(), "vault.json"))
