@@ -21,7 +21,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * JSON-based storage
 * Storage validation to detect malformed or corrupted data
 * Comprehensive automated test suite
-* 100% test coverage of the `src` package
+* 100% test coverage of the `password_manager` package
 
 ## Security Overview
 
@@ -214,12 +214,12 @@ The log contains operational information useful for debugging and auditing appli
 
 ## Requirements
 
-* Python 3.14 or compatible Python version
+* Python 3.12 or newer (developed on 3.14)
 * `cryptography`
 * `pyperclip`
 * `keyring`
 
-Current dependency versions:
+Dependencies are declared in `pyproject.toml`. Current versions:
 
 ```text
 cryptography==46.0.3
@@ -248,15 +248,17 @@ Activate the virtual environment:
 source .venv/bin/activate
 ```
 
-Install the dependencies:
+Install the package with its development dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
+
+This installs the `pm` command into the virtual environment.
 
 ## Usage
 
-The application is started through `main.py`.
+The application is started with the `pm` command. `python main.py` still works and runs the same CLI.
 
 The available commands are:
 
@@ -276,7 +278,7 @@ list
 Register interactively:
 
 ```bash
-python main.py register
+pm register
 ```
 
 The application will ask for a username and master password.
@@ -284,13 +286,13 @@ The application will ask for a username and master password.
 A username and master password can also be supplied directly:
 
 ```bash
-python main.py register --username alice
+pm register --username alice
 ```
 
 The `--password` option is available for scripting:
 
 ```bash
-python main.py register --username alice --password "example-password"
+pm register --username alice --password "example-password"
 ```
 
 > **Security note:** Supplying passwords directly on the command line can expose them through shell history, process inspection, or other operating-system mechanisms. Interactive password entry is recommended.
@@ -300,13 +302,13 @@ python main.py register --username alice --password "example-password"
 Login interactively:
 
 ```bash
-python main.py login
+pm login
 ```
 
 Or specify the username:
 
 ```bash
-python main.py login --username alice
+pm login --username alice
 ```
 
 After successful authentication, a session is created in the operating system's keyring.
@@ -316,7 +318,7 @@ After successful authentication, a session is created in the operating system's 
 Clear the current session:
 
 ```bash
-python main.py logout
+pm logout
 ```
 
 ### Generate a password
@@ -324,7 +326,7 @@ python main.py logout
 Generate and store a password:
 
 ```bash
-python main.py generate github
+pm generate github
 ```
 
 The default password length is 16 characters.
@@ -332,13 +334,13 @@ The default password length is 16 characters.
 A different length can be specified:
 
 ```bash
-python main.py generate github --length 24
+pm generate github --length 24
 ```
 
 A login/email/username can also be associated with the generated password:
 
 ```bash
-python main.py generate github --length 24 --login alice@example.com
+pm generate github --length 24 --login alice@example.com
 ```
 
 ### Set credentials
@@ -346,19 +348,19 @@ python main.py generate github --length 24 --login alice@example.com
 Set a password:
 
 ```bash
-python main.py set github --password "example-password"
+pm set github --password "example-password"
 ```
 
 Set a login:
 
 ```bash
-python main.py set github --login alice@example.com
+pm set github --login alice@example.com
 ```
 
 Both can be set at the same time:
 
 ```bash
-python main.py set github \
+pm set github \
     --login alice@example.com \
     --password "example-password"
 ```
@@ -378,13 +380,13 @@ Password entries can be assigned tags to make it easier to organize and filter r
 Add a tag to an existing label with:
 
 ```bash
-python main.py set ebay.com --tag dropshipping
+pm set ebay.com --tag dropshipping
 ```
 
 Multiple tags can be added to the same label by repeating the `--tag` option:
 
 ```bash
-python main.py set ebay.com \
+pm set ebay.com \
     --tag dropshipping \
     --tag ecommerce
 ```
@@ -398,7 +400,7 @@ Tags are additive, so adding a new tag does not replace existing tags. Duplicate
 To list only labels containing a specific tag:
 
 ```bash
-python main.py list --tag dropshipping
+pm list --tag dropshipping
 ```
 
 For example:
@@ -411,7 +413,7 @@ Stored labels:
 Multiple tags can be supplied to `list`:
 
 ```bash
-python main.py list --tag dropshipping ecommerce
+pm list --tag dropshipping ecommerce
 ```
 
 When multiple tags are specified, a label must contain **all** of the requested tags to be included in the results.
@@ -427,7 +429,7 @@ github.com     -> development, personal
 the following command:
 
 ```bash
-python main.py list --tag dropshipping ecommerce
+pm list --tag dropshipping ecommerce
 ```
 
 returns only:
@@ -456,13 +458,13 @@ No passwords found with tags: dropshipping, ecommerce.
 A tag can be removed from an existing password label with:
 
 ```bash
-python main.py remove github --tag development
+pm remove github --tag development
 ```
 
 Multiple tags can be removed in a single operation:
 
 ```bash
-python main.py remove github --tag development work
+pm remove github --tag development work
 ```
 
 Removing tags does not modify the password or login associated with the label.
@@ -501,7 +503,7 @@ Labels that do not contain a `tags` field are supported for backwards compatibil
 Retrieve a password:
 
 ```bash
-python main.py get github
+pm get github
 ```
 
 The password is copied to the system clipboard.
@@ -511,7 +513,7 @@ If the entry contains a login, it is displayed as well.
 To explicitly display the password in the terminal:
 
 ```bash
-python main.py get github --show
+pm get github --show
 ```
 
 Displaying passwords in the terminal should be avoided when unnecessary.
@@ -521,19 +523,19 @@ Displaying passwords in the terminal should be avoided when unnecessary.
 List all stored password labels:
 
 ```bash
-python main.py list
+pm list
 ```
 
 To filter labels by a single tag:
 
 ```bash
-python main.py list --tag dropshipping
+pm list --tag dropshipping
 ```
 
 To filter labels by multiple tags:
 
 ```bash
-python main.py list --tag dropshipping ecommerce
+pm list --tag dropshipping ecommerce
 ```
 
 When multiple tags are supplied, only labels containing **all** requested tags are displayed.
@@ -558,7 +560,7 @@ Overrides the default `vault.json` location.
 Example:
 
 ```bash
-VAULT_FILE=/tmp/test-vault.json python main.py list
+VAULT_FILE=/tmp/test-vault.json pm list
 ```
 
 ### `USERS_FILE`
@@ -568,7 +570,7 @@ Overrides the default `users.json` location.
 Example:
 
 ```bash
-USERS_FILE=/tmp/test-users.json python main.py register
+USERS_FILE=/tmp/test-users.json pm register
 ```
 
 These environment variables are particularly useful for testing.
@@ -578,32 +580,24 @@ These environment variables are particularly useful for testing.
 ```text
 password_manager/
 ├── main.py
-├── requirements.txt
-├── pytest.ini
+├── pyproject.toml
 ├── src/
-│   ├── __init__.py
-│   ├── cli.py
-│   ├── constants.py
-│   ├── core.py
-│   ├── crypto.py
-│   ├── logger.py
-│   ├── session.py
-│   ├── storage.py
-│   ├── user.py
-│   └── validate_storage.py
+│   └── password_manager/
+│       ├── __init__.py
+│       ├── cli.py
+│       ├── constants.py
+│       ├── core.py
+│       ├── crypto.py
+│       ├── logger.py
+│       ├── session.py
+│       ├── storage.py
+│       ├── user.py
+│       └── validate_storage.py
 └── tests/
     ├── conftest.py
-    ├── __init__.py
-    ├── test_cli.py
-    ├── test_core.py
-    ├── test_crypto.py
-    ├── test_e2e.py
-    ├── test_integration.py
-    ├── test_logger.py
-    ├── test_session.py
-    ├── test_storage.py
-    ├── test_user.py
-    └── test_validate_storage.py
+    ├── unit/
+    ├── integration/
+    └── e2e/
 ```
 
 ### Source modules
@@ -619,24 +613,32 @@ password_manager/
 | `storage.py`          | Reading, writing, and backing up persistent data   |
 | `user.py`             | User registration and authentication               |
 | `validate_storage.py` | Validation of users and vault data                 |
-| `main.py`             | Application entry point                            |
+| `main.py`             | Alternative entry point (`pm` is the main one)     |
 
 ## Testing
 
 The project uses [pytest](https://pytest.org/) for automated testing.
 
-Run the complete test suite with:
+Tests are split by type, and every test is tagged with a matching marker:
+
+* `tests/unit/` (`@pytest.mark.unit`): fast and isolated, with no real I/O.
+* `tests/integration/` (`@pytest.mark.integration`): real dependencies such as files or subprocesses, for one feature.
+* `tests/e2e/` (`@pytest.mark.e2e`): full CLI flows across several features.
 
 ```bash
-pytest
+pytest -m unit                    # unit tests only
+pytest -m "unit or integration"   # unit and integration tests
+pytest                            # complete suite
 ```
 
-The current test suite contains **187 tests**.
+No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
+
+The current test suite contains **191 tests**.
 
 Coverage can be generated with:
 
 ```bash
-pytest --cov=src --cov-report=term-missing
+pytest --cov --cov-report=term-missing
 ```
 
 The current implementation achieves:
@@ -647,7 +649,7 @@ The current implementation achieves:
 100% coverage
 ```
 
-All modules under `src` currently have 100% test coverage.
+All modules in the `password_manager` package currently have 100% test coverage.
 
 ## Security Considerations
 
@@ -670,7 +672,7 @@ If the master password is lost, there is currently no password-recovery mechanis
 The CLI supports supplying passwords through command-line arguments for scripting:
 
 ```bash
-python main.py login --username alice --password "example-password"
+pm login --username alice --password "example-password"
 ```
 
 This can expose sensitive information through shell history or process inspection.
