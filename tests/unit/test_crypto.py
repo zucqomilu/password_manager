@@ -1,14 +1,18 @@
-from src.crypto import derive_key, generate_salt
+import pytest
+from password_manager.crypto import derive_key, generate_salt
 
+@pytest.mark.unit
 def test_generate_salt_length():
     salt = generate_salt()
     assert isinstance(salt, bytes)
     assert len(salt) == 16
 
+@pytest.mark.unit
 def test_generate_salt_custom_length():
     salt = generate_salt(32)
     assert len(salt) == 32
 
+@pytest.mark.unit
 def test_derive_key_consistency():
     password = "securepassword"
     salt = b"0123456789abcdef"
@@ -16,6 +20,7 @@ def test_derive_key_consistency():
     key2 = derive_key(password, salt)
     assert key1 == key2  # Deterministic output
 
+@pytest.mark.unit
 def test_derive_key_different_salts():
     password = "securepassword"
     salt1 = b"0123456789abcdef"
@@ -24,6 +29,7 @@ def test_derive_key_different_salts():
     key2 = derive_key(password, salt2)
     assert key1 != key2  # Different salt → different key
 
+@pytest.mark.unit
 def test_derive_key_type_and_length():
     password = "securepassword"
     salt = b"0123456789abcdef"

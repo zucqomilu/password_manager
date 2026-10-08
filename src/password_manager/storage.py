@@ -2,10 +2,10 @@ import shutil, json, os
 from datetime import datetime
 from .logger import logger
 from .validate_storage import validate_users, validate_vault
-import src.constants
+import password_manager.constants
 
 def load_users():
-    path = src.constants.get_users()
+    path = password_manager.constants.get_users()
     
     if not os.path.exists(path):
         logger.warning(f"Users file does not exist at: {path}")
@@ -32,12 +32,12 @@ def save_users(users):
         logger.error("Aborting save: user validation failed.")
         return
     
-    logger.debug(f"Saving users to {src.constants.get_users()}: {json.dumps(users, indent=2)}")
-    with open(src.constants.get_users(), 'w') as f:
+    logger.debug(f"Saving users to {password_manager.constants.get_users()}: {json.dumps(users, indent=2)}")
+    with open(password_manager.constants.get_users(), 'w') as f:
         json.dump(users, f, indent=4)
 
 def load_vault():
-    path = src.constants.get_vault()
+    path = password_manager.constants.get_vault()
     if not os.path.exists(path):
         logger.warning(f"Vault file does not exist at: {path}")
         return {}
@@ -63,12 +63,12 @@ def save_vault(data):
         logger.error("Aborting save: vault validation failed.")
         return
 
-    logger.debug(f"Saving vault to {src.constants.get_vault()}: {json.dumps(data, indent=2)}")
-    with open(src.constants.get_vault(), 'w') as f:
+    logger.debug(f"Saving vault to {password_manager.constants.get_vault()}: {json.dumps(data, indent=2)}")
+    with open(password_manager.constants.get_vault(), 'w') as f:
         json.dump(data, f, indent=4)
 
 def backup_vault():
-    vault_path = src.constants.get_vault()
+    vault_path = password_manager.constants.get_vault()
     if not os.path.exists(vault_path):
         logger.error("Aborting backup: vault not found.")
         return None

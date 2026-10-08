@@ -14,3 +14,9 @@ session.json
 notes.txt
 commits.txt
 base64
+*.egg-info/
+.venv/
+.pytest_cache/
+.env
+TODO.org
+.#*
