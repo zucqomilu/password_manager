@@ -15,7 +15,7 @@ def get_vault():
     return os.environ.get("VAULT_FILE", os.path.join(get_data_dir(), "vault.json"))
 
 def get_users():
-    return os.environ.get("USERS_FILE", os.path.join(BASE_DIR, "users.json"))
+    return os.environ.get("USERS_FILE", os.path.join(get_data_dir(), "users.json"))
 
 def get_log():
     return os.path.join(BASE_DIR, "vault.log")
