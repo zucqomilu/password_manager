@@ -19,3 +19,4 @@ base64
 .pytest_cache/
 .env
 TODO.org
+.#*
