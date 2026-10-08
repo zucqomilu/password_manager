@@ -5,7 +5,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 def get_data_dir():
     return os.path.join(
-        os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+        os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
         "password_manager",
     )
 
