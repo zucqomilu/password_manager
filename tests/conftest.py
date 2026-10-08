@@ -1,4 +1,6 @@
 import pytest, base64, json, builtins, tempfile, os, time
+import keyring
+from keyring.backends.null import Keyring as NullKeyring
 from keyring.errors import PasswordDeleteError
 from password_manager.crypto import derive_key
 from cryptography.fernet import Fernet
@@ -23,6 +25,15 @@ def mock_delete_password(service, username):
         raise PasswordDeleteError("Password not found")
 
     del test_keyring[key]
+
+
+# Guarantee no test can read or write the real OS keyring, even one that forgets to mock it
+@pytest.fixture(autouse=True)
+def no_real_keyring():
+    previous = keyring.get_keyring()
+    keyring.set_keyring(NullKeyring())
+    yield
+    keyring.set_keyring(previous)
 
 
 # Helper to generate valid base64 strings

@@ -1,3 +1,4 @@
+import pytest
 import os, re, json
 from pathlib import Path
 from password_manager.cli import main
@@ -83,6 +84,7 @@ def generate_and_overwrite(label, overwrite, capsys, main_func):
     return pw1, pw2
 
 
+@pytest.mark.e2e
 def test_e2e_register_and_login(capsys, set_test_env):
     username, password, _ = "e2euser", "e2epas", set_test_env
     register_and_login(username, password, capsys, main)
@@ -91,6 +93,7 @@ def test_e2e_register_and_login(capsys, set_test_env):
     assert session_data[0] == username
 
 
+@pytest.mark.e2e
 def test_e2e_incorrect_login_fails(capsys, set_test_env):
     username, correct_password, wrong_password, _ = "wronguser", "correct", "incorrect", set_test_env
 
@@ -105,6 +108,7 @@ def test_e2e_incorrect_login_fails(capsys, set_test_env):
     assert load_session() is None
 
         
+@pytest.mark.e2e
 def test_e2e_corrupted_users_file(capsys, set_test_env):
     # Corrupt the users file with invalid JSON
     with open(os.path.join(set_test_env, "users.json"), "w") as f:
@@ -117,6 +121,7 @@ def test_e2e_corrupted_users_file(capsys, set_test_env):
     assert "Error: Failed to load users database." in out
 
 
+@pytest.mark.e2e
 def test_e2e_missing_users_file(capsys, set_test_env):
     users_file = os.path.join(set_test_env, "users.json")
     # Delete the users file
@@ -131,6 +136,7 @@ def test_e2e_missing_users_file(capsys, set_test_env):
     assert os.path.exists(users_file)
 
 
+@pytest.mark.e2e
 def test_e2e_empty_users_file(capsys, set_test_env):
     # Create an empty users file (0 bytes)
     with open(os.path.join(set_test_env, "users.json"), "w"): pass
@@ -142,6 +148,7 @@ def test_e2e_empty_users_file(capsys, set_test_env):
     assert "Failed to load users database." in out
 
 
+@pytest.mark.e2e
 def test_e2e_generate_and_get(capsys, set_test_env):
     username, password, label, _ = "alice", "wonderland", "email", set_test_env
     register_and_login(username, password, capsys, main)
@@ -149,6 +156,7 @@ def test_e2e_generate_and_get(capsys, set_test_env):
     generate_and_get(label, capsys, main, "--show")
 
 
+@pytest.mark.e2e
 def test_e2e_get_without_show(capsys, set_test_env):
     username, password, label, _ = "carol", "pass123", "social", set_test_env
     register_and_login(username, password, capsys, main)
@@ -156,6 +164,7 @@ def test_e2e_get_without_show(capsys, set_test_env):
     generate_and_get(label, capsys, main)
         
 
+@pytest.mark.e2e
 def test_e2e_session_persistence(capsys, set_test_env):
     username, password, label, _ = "persistuser", "stayloggedin", "github", set_test_env
     register_and_login(username, password, capsys, main)
@@ -168,6 +177,7 @@ def test_e2e_session_persistence(capsys, set_test_env):
     assert f"Password for '{label}'" in out or "Password:" in out
 
 
+@pytest.mark.e2e
 def test_e2e_no_session_requires_login(capsys, set_test_env):
     username, password, label, _ = "ghost", "nopersist", "bank", set_test_env
 
@@ -179,6 +189,7 @@ def test_e2e_no_session_requires_login(capsys, set_test_env):
     generate_and_list_not_logged_in(label, capsys, main)
 
 
+@pytest.mark.e2e
 def test_e2e_session_deleted_requires_login(capsys, set_test_env):
     username, password, label, _ = "ghost", "nopersist", "bank", set_test_env
     register_and_login(username, password, capsys, main)
@@ -190,6 +201,7 @@ def test_e2e_session_deleted_requires_login(capsys, set_test_env):
     generate_and_list_not_logged_in(label, capsys, main)
 
 
+@pytest.mark.e2e
 def test_e2e_corrupted_session(capsys, set_test_env):
     username, password, label, _ = "brokenuser", "pass123", "bank", set_test_env
     register_and_login(username, password, capsys, main)
@@ -206,6 +218,7 @@ def test_e2e_corrupted_session(capsys, set_test_env):
     assert "Please run `login` first" in out
 
 
+@pytest.mark.e2e
 def test_e2e_list_labels(capsys, set_test_env):
     username, password, _ = "bob", "builder" , set_test_env 
     register_and_login(username, password, capsys, main)
@@ -225,6 +238,7 @@ def test_e2e_list_labels(capsys, set_test_env):
         assert label in out
 
 
+@pytest.mark.e2e
 def test_e2e_get_nonexistent_label(capsys, set_test_env):
     username, password, label, _ = "missinguser", "hunter2", "nonexistent", set_test_env
     register_and_login(username, password, capsys, main)
@@ -236,6 +250,7 @@ def test_e2e_get_nonexistent_label(capsys, set_test_env):
     assert f"No password found for '{label}'" in out
 
 
+@pytest.mark.e2e
 def test_e2e_overwrite_creates_backup(capsys, set_test_env):
     username, password, label = "versionuser", "verpass", "social"
     register_and_login(username, password, capsys, main)
@@ -248,6 +263,7 @@ def test_e2e_overwrite_creates_backup(capsys, set_test_env):
     assert len(backups) == 1
 
 
+@pytest.mark.e2e
 def test_e2e_overwrite_creates_versions(capsys, set_test_env):
     _ = set_test_env
     username, password, label = "versionuser", "secure123", "github"
@@ -266,6 +282,7 @@ def test_e2e_overwrite_creates_versions(capsys, set_test_env):
     assert f"Password: {pw2}" in out
 
 
+@pytest.mark.e2e
 def test_e2e_cancel_overwrite_preserves_password(capsys, set_test_env):
     username, password, label = "canceluser", "refusepass", "bank"
     register_and_login(username, password, capsys, main)
@@ -285,6 +302,7 @@ def test_e2e_cancel_overwrite_preserves_password(capsys, set_test_env):
     assert len(backup_files) == 0
 
 
+@pytest.mark.e2e
 def test_e2e_logout_clears_session(capsys, set_test_env):
     username, password, _ = "logoutuser", "logoutpass", set_test_env
 
@@ -303,6 +321,7 @@ def test_e2e_logout_clears_session(capsys, set_test_env):
     assert "not logged in" in out
 
 
+@pytest.mark.e2e
 def test_e2e_single_active_session(capsys, set_test_env):
     _ = set_test_env
     register_and_login("alice", "wonderland", capsys, main)
@@ -328,6 +347,7 @@ def test_e2e_single_active_session(capsys, set_test_env):
     assert "not logged in" in out
 
 
+@pytest.mark.e2e
 def test_cli_generate_with_login(set_test_env, capsys):
     username, password, _ = "alice", "wonderland", set_test_env
     register_and_login(username, password, capsys, main)
@@ -360,6 +380,7 @@ def test_cli_generate_with_login(set_test_env, capsys):
     assert decrypted_login == "alice@example.com"
 
 
+@pytest.mark.e2e
 def test_cli_set_login_and_password(set_test_env, capsys):
     username, _ = "alice", set_test_env
     register_and_login(username, "wonderland", capsys, main)
@@ -382,6 +403,7 @@ def test_cli_set_login_and_password(set_test_env, capsys):
     assert decrypted_login == "alice@linkedin.com"
 
 
+@pytest.mark.e2e
 def test_cli_set_password_only(set_test_env, capsys):
     username, _ = "alice", set_test_env
     register_and_login(username, "wonderland", capsys, main)
@@ -401,6 +423,7 @@ def test_cli_set_password_only(set_test_env, capsys):
     assert decrypted_pw == "secret123"
 
 
+@pytest.mark.e2e
 def test_cli_set_login_only(set_test_env, capsys):
     username, _ = "alice", set_test_env
     register_and_login(username, "wonderland", capsys, main)
@@ -414,6 +437,7 @@ def test_cli_set_login_only(set_test_env, capsys):
     #assert vault[username] is None
 
 
+@pytest.mark.e2e
 def test_update_only_login_on_existing_label(set_test_env, fernet, capsys):
     username, password, label, _ = "alice", "wonderland", "email", set_test_env
     register_and_login(username, password, capsys, main)
@@ -436,6 +460,7 @@ def test_update_only_login_on_existing_label(set_test_env, fernet, capsys):
     assert decrypted_login == "new@example.com"
 
 
+@pytest.mark.e2e
 def test_update_password_and_login_on_existing_label(set_test_env, fernet, capsys):
     username, password, label, _ = "alice", "wonderland", "email", set_test_env
     register_and_login(username, password, capsys, main)
@@ -461,6 +486,7 @@ def test_update_password_and_login_on_existing_label(set_test_env, fernet, capsy
     assert fernet.decrypt(entry["login"].encode()).decode() == "updated@example.com"
 
 
+@pytest.mark.e2e
 def test_e2e_session_activity_is_refreshed(capsys, set_test_env, mock_session_keyring):
     _ = set_test_env
     username, password = "refreshuser", "refreshpass"

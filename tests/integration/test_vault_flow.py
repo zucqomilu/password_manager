@@ -31,6 +31,7 @@ def get_vault_user_entry(username: str, set_test_env) -> dict:
     return vault_user_entry
 
 
+@pytest.mark.integration
 def test_full_user_flow(capsys, set_test_env):
     username, password = "testuser", "secure123"
     fernet = register_login_save_session_load_session(username, password)
@@ -46,6 +47,7 @@ def test_full_user_flow(capsys, set_test_env):
     assert "Password: p@ssW0rd!" in captured.out
 
 
+@pytest.mark.integration
 def test_overwrite_triggers_versioning_and_backup(set_test_env, monkeypatch):
     username, password = "testuser", "secret123"
     fernet = register_login_save_session_load_session(username, password)
@@ -67,6 +69,7 @@ def test_overwrite_triggers_versioning_and_backup(set_test_env, monkeypatch):
     assert len(backups) == 1
 
 
+@pytest.mark.integration
 def test_cancel_overwrite_does_not_modify_vault(set_test_env, monkeypatch):
     username, password = "testuser", "secret123"
     fernet = register_login_save_session_load_session(username, password)
@@ -87,6 +90,7 @@ def test_cancel_overwrite_does_not_modify_vault(set_test_env, monkeypatch):
     assert decrypted == original_pwd
 
 
+@pytest.mark.integration
 def test_login_with_wrong_password_fails(set_test_env):
     _ = set_test_env
     username, correct_password, wrong_password = "testuser", "rightpass", "wrongpass"
@@ -99,6 +103,7 @@ def test_login_with_wrong_password_fails(set_test_env):
     assert load_session() is None
 
 
+@pytest.mark.integration
 def test_retrieve_previous_password_version(set_test_env, monkeypatch):
     username, password, label = "testuser", "master123", "email"
     old_pwd, new_pwd = "first-password", "second-password"
@@ -118,6 +123,7 @@ def test_retrieve_previous_password_version(set_test_env, monkeypatch):
     assert decrypted_old_pwd == old_pwd
 
 
+@pytest.mark.integration
 def test_retrieve_nonexistent_label_returns_none(set_test_env):
     _ = set_test_env
     username, password, missing_label = "testuser", "secure123", "does_not_exist"
@@ -127,6 +133,7 @@ def test_retrieve_nonexistent_label_returns_none(set_test_env):
     assert result is None
 
 
+@pytest.mark.integration
 def test_save_and_get_login_password_pair(set_test_env):
     username, password, label = "alice", "master123", "email"
     fernet = register_login_save_session_load_session(username, password)
@@ -140,6 +147,7 @@ def test_save_and_get_login_password_pair(set_test_env):
     assert fernet.decrypt(encrypted["login"].encode()).decode() == login
 
 
+@pytest.mark.integration
 def test_save_and_get_login_only_returns_false(set_test_env):
     _ = set_test_env
     username, password, label = "alice", "master123", "email"
@@ -150,6 +158,7 @@ def test_save_and_get_login_only_returns_false(set_test_env):
     assert result is False
 
 
+@pytest.mark.integration
 def test_session_can_be_cleared(set_test_env):
     _ = set_test_env
     username = "testuser"

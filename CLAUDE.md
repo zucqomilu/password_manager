@@ -10,20 +10,15 @@ pip install -e ".[dev]"                  # editable install from pyproject.toml
 
 python main.py <command> [args]          # register | login | logout | generate | set | get | remove | list
 
-pytest                                   # full suite
-pytest tests/test_core.py                # one file
-pytest tests/test_core.py::test_name     # one test
+pytest -m unit                           # day-to-day loop
+pytest -m "unit or integration"          # before merging a feature branch
+pytest                                   # full suite incl. e2e, before merging to main
+pytest tests/unit/test_core.py           # one file
+pytest tests/unit/test_core.py::test_name  # one test
 pytest --cov --cov-report=term-missing  # coverage (README claims 100% of src/)
 ```
 
 There is no linter or build step configured.
-
-## Layout deviations from the global conventions
-
-This project predates the global `~/.claude/CLAUDE.md` conventions and differs from them. Ask before restructuring any of these:
-
-- Tests are flat in `tests/` (`test_<module>.py`, plus `test_integration.py` and `test_e2e.py`) rather than `tests/unit|integration|e2e/`.
-- The `unit`/`integration`/`e2e` markers are registered, but only `tests/test_session.py` uses them, so `pytest -m unit` runs only a small subset.
 
 ## Architecture
 
@@ -48,6 +43,8 @@ Key behaviors that span files:
 
 ## Testing notes
 
+- `tests/unit/test_layout.py` fails unless every test function has exactly one `@pytest.mark.unit|integration|e2e` decorator matching its directory. Module-level `pytestmark` doesn't count.
+- An autouse fixture in `tests/conftest.py` switches `keyring` to its null backend for every test, so no test can touch the real OS keyring.
 - `storage.py` reads paths through `password_manager.constants.get_vault()` / `get_users()` at call time. These functions honor the `VAULT_FILE` / `USERS_FILE` environment variables, which makes the paths patchable. Keep that indirection; don't import the values directly.
 - The `set_test_env` fixture in `tests/conftest.py` points both files at a temp dir and replaces `password_manager.session.keyring.*` with an in-memory dict. Any test that touches storage or sessions must use it. The repo root holds real `vault.json` / `users.json` files (gitignored), and the real keyring would otherwise be used.
 - `test_clock` freezes `password_manager.session.time.time` for testing TTL expiry. `mock_session_keyring` reads and writes the raw session entry.

@@ -1,3 +1,4 @@
+import pytest
 import sys
 from unittest.mock import patch
 from password_manager import cli
@@ -8,6 +9,7 @@ def run_cli_with_args(args):
         cli.main()
 
 
+@pytest.mark.unit
 def test_register_user():
     with patch('password_manager.cli.register_user') as mock_register_user, \
          patch('builtins.input', return_value='testuser'), \
@@ -17,6 +19,7 @@ def test_register_user():
         mock_register_user.assert_called_once_with('testuser', 'testpass')
 
 
+@pytest.mark.unit
 def test_login_success():
     with patch('password_manager.cli.authenticate_user') as mock_authenticate_user, \
          patch('password_manager.cli.save_session') as mock_save_session, \
@@ -28,6 +31,7 @@ def test_login_success():
         mock_save_session.assert_called_once()
 
 
+@pytest.mark.unit
 def test_login_failure(capsys):
     with patch.object(sys, "argv", ["prog", "login"]), \
          patch("builtins.input", return_value="testuser"), \
@@ -38,14 +42,17 @@ def test_login_failure(capsys):
         assert "Login failed: Incorrect password." in captured.out
     
 
+@pytest.mark.unit
 def test_logout():
     with patch('password_manager.cli.clear_session') as mock_clear_session:
         run_cli_with_args(['prog', 'logout'])
         mock_clear_session.assert_called_once()
 
 
+@pytest.mark.unit
 def test_generate_command():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.generate_password') as mock_generate_password, \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
@@ -56,16 +63,20 @@ def test_generate_command():
         mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='password123!', login=None)
 
 
+@pytest.mark.unit
 def test_set_command_success():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'set', 'mylabel', '--password', 'mypassword', '--login', 'testuser@example.com'])
         mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='mypassword', login='testuser@example.com', tags=None)
 
 
+@pytest.mark.unit
 def test_set_command_failure(capsys):
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'set', 'mylabel'])
@@ -74,22 +85,27 @@ def test_set_command_failure(capsys):
         assert "Error: You must specify at least --password or --login or --tags." in captured.out
 
 
+@pytest.mark.unit
 def test_get_command():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.get_password') as mock_get_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'get', 'mylabel', '--show'])
         mock_get_password.assert_called_once_with('testuser', 'mylabel', b'fernet', show=True)
 
 
+@pytest.mark.unit
 def test_list_command():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'list'])
         mock_list_labels.assert_called_once_with('testuser', b'fernet', tags=None)
 
 
+@pytest.mark.unit
 def test_no_session_for_protected_commands(capfd):
     with patch('password_manager.cli.load_session', return_value=None):
         run_cli_with_args(['prog', 'list'])
@@ -97,8 +113,10 @@ def test_no_session_for_protected_commands(capfd):
         assert "not logged in" in output.out.lower()
 
 
+@pytest.mark.unit
 def test_set_command_with_tag():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -114,8 +132,10 @@ def test_set_command_with_tag():
         )
 
 
+@pytest.mark.unit
 def test_list_command_with_tag():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -128,8 +148,10 @@ def test_list_command_with_tag():
         )
 
 
+@pytest.mark.unit
 def test_list_command_with_multiple_tags():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -142,8 +164,10 @@ def test_list_command_with_multiple_tags():
         )
 
 
+@pytest.mark.unit
 def test_remove_command_with_tag():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.remove_tags') as mock_remove_tags:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -156,8 +180,10 @@ def test_remove_command_with_tag():
         )
 
 
+@pytest.mark.unit
 def test_remove_command_with_multiple_tags():
     with patch('password_manager.cli.load_session') as mock_load_session, \
+         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.remove_tags') as mock_remove_tags:
 
         mock_load_session.return_value = ('testuser', b'fernet')

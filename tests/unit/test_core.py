@@ -1,20 +1,24 @@
+import pytest
 import logging
 from unittest.mock import patch
 from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags
 
 
+@pytest.mark.unit
 def test_generate_password():
     password = generate_password()
     assert isinstance(password, str)
     assert len(password) == 16
 
 
+@pytest.mark.unit
 def test_generate_password_length():
     password = generate_password(20)
     assert isinstance(password, str)
     assert len(password) == 20
 
 
+@pytest.mark.unit
 def test_save_password_without_login(fernet):
     with patch("password_manager.core.load_vault", return_value={"alice": {}}), \
          patch("password_manager.core.save_vault") as mock_save:
@@ -24,6 +28,7 @@ def test_save_password_without_login(fernet):
         assert "password" in saved["alice"]["github"]
 
 
+@pytest.mark.unit
 def test_save_password_with_login(fernet):
     with patch("password_manager.core.load_vault", return_value={"alice": {}}), \
          patch("password_manager.core.save_vault") as mock_save:
@@ -34,6 +39,7 @@ def test_save_password_with_login(fernet):
         assert "password" in entry and "login" in entry
 
 
+@pytest.mark.unit
 def test_save_password_overwrite_prompt_no(caplog, fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.input", return_value='n'), \
@@ -43,6 +49,7 @@ def test_save_password_overwrite_prompt_no(caplog, fernet, valid_vault):
         assert "User cancelled overwrite for 'github'." in caplog.text
 
 
+@pytest.mark.unit
 def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
     valid_vault["alice"]["github"]["password"] = "notbase64==="
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
@@ -53,6 +60,7 @@ def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
         assert "Failed to overwrite 'github' due to incorrect master password." in caplog.text
 
 
+@pytest.mark.unit
 def test_save_password_new_label(fernet):
     with patch("password_manager.core.load_vault", return_value={}), \
          patch("password_manager.core.save_vault") as mock_save, \
@@ -63,6 +71,7 @@ def test_save_password_new_label(fernet):
         mock_save.assert_called_once()
 
 
+@pytest.mark.unit
 def test_save_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
@@ -72,6 +81,7 @@ def test_save_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fer
         assert "Vault loading failed: returned None." in caplog.text
 
 
+@pytest.mark.unit
 def test_save_password_creates_correct_version_label(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.save_vault") as mock_save, \
@@ -85,6 +95,7 @@ def test_save_password_creates_correct_version_label(fernet, valid_vault):
         mock_backup.assert_called_once()
 
 
+@pytest.mark.unit
 def test_save_password_overwrite(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.save_vault") as mock_save, \
@@ -96,6 +107,7 @@ def test_save_password_overwrite(fernet, valid_vault):
         mock_save.assert_called_once()
 
 
+@pytest.mark.unit
 def test_save_password_user_declines_overwrite(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.save_vault") as mock_save, \
@@ -107,6 +119,7 @@ def test_save_password_user_declines_overwrite(fernet, valid_vault):
         mock_print.assert_any_call("Operation cancelled.")
 
 
+@pytest.mark.unit
 def test_save_password_overwrite_fails_on_bad_decryption(fernet, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invalid_encrypted_data:newpassword"
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
@@ -120,6 +133,7 @@ def test_save_password_overwrite_fails_on_bad_decryption(fernet, valid_vault):
         mock_print.assert_any_call("Error: A password already exists for 'github', and the provided master password does not match.")
 
 
+@pytest.mark.unit
 def test_set_login_only(fernet):
     with patch("password_manager.core.load_vault", return_value={"bob": {}}), \
          patch("password_manager.core.save_vault") as mock_save, \
@@ -129,6 +143,7 @@ def test_set_login_only(fernet):
         mock_print.assert_any_call("Error: Cannot create label 'gitlab' without a password.")
 
 
+@pytest.mark.unit
 def test_set_password_only(fernet):
     with patch("password_manager.core.load_vault", return_value={"bob": {}}), \
          patch("password_manager.core.save_vault") as mock_save:
@@ -139,6 +154,7 @@ def test_set_password_only(fernet):
         assert fernet.decrypt(password_encrypted.encode()).decode() == "mysecretpassword"
 
 
+@pytest.mark.unit
 def test_set_password_and_login(fernet):
     with patch("password_manager.core.load_vault", return_value={"bob": {}}), \
          patch("password_manager.core.save_vault") as mock_save:
@@ -152,6 +168,7 @@ def test_set_password_and_login(fernet):
         assert fernet.decrypt(login_encrypted.encode()).decode() == "bob@example.com"
 
 
+@pytest.mark.unit
 def test_get_password_success(fernet, capsys, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.pyperclip.copy") as mock_clipboard:
@@ -161,6 +178,7 @@ def test_get_password_success(fernet, capsys, valid_vault):
         mock_clipboard.assert_called_once()
 
 
+@pytest.mark.unit
 def test_get_password_with_login(capsys, fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), patch("pyperclip.copy"):
         get_password("alice", "github", fernet, show=True)
@@ -169,6 +187,7 @@ def test_get_password_with_login(capsys, fernet, valid_vault):
         assert "Login: alice@example.com" in out
 
 
+@pytest.mark.unit
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
@@ -178,6 +197,7 @@ def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fern
         assert "Vault loading failed: returned None." in caplog.text
 
 
+@pytest.mark.unit
 def test_get_password_invalid_decryption(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invaliddata"
     with patch("password_manager.core.load_vault", return_value=valid_vault):
@@ -186,6 +206,7 @@ def test_get_password_invalid_decryption(fernet, capsys, valid_vault):
         assert "Incorrect master password" in captured.out
 
 
+@pytest.mark.unit
 def test_get_password_label_not_found(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("builtins.print") as mock_print:
@@ -193,6 +214,7 @@ def test_get_password_label_not_found(fernet, valid_vault):
         mock_print.assert_any_call("No password found for 'nonexistent'.")
 
 
+@pytest.mark.unit
 def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invaliddata"
     with patch("password_manager.core.load_vault", return_value=valid_vault):
@@ -202,6 +224,7 @@ def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
         assert "- github" not in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_empty_user_vault(fernet):
     with patch("password_manager.core.load_vault", return_value={"testuser": {}}), \
          patch("builtins.print") as mock_print:
@@ -209,6 +232,7 @@ def test_list_labels_empty_user_vault(fernet):
         mock_print.assert_any_call("No passwords found for this user.")
 
 
+@pytest.mark.unit
 def test_list_labels_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
@@ -218,6 +242,7 @@ def test_list_labels_logs_and_prints_on_vault_load_failure(capsys, caplog, ferne
         assert "Vault loading failed: returned None." in caplog.text
 
 
+@pytest.mark.unit
 def test_list_labels_filters_versioned_backups(fernet, capsys, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet)
@@ -229,6 +254,7 @@ def test_list_labels_filters_versioned_backups(fernet, capsys, valid_vault):
         assert "- twitter__v1" not in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_keeps_labels_with_similar_names(fernet, capsys, valid_vault):
     valid_vault["alice"]["my__vpn"] = {
         "password": fernet.encrypt(b"vpnpassword").decode()
@@ -250,6 +276,7 @@ def test_list_labels_keeps_labels_with_similar_names(fernet, capsys, valid_vault
         assert "- github__vabc" in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_filters_multiple_digit_versioned_backups(fernet, capsys, valid_vault):
     valid_vault["alice"]["github__v10"] = {
         "password": fernet.encrypt(b"oldpassword").decode()
@@ -263,6 +290,7 @@ def test_list_labels_filters_multiple_digit_versioned_backups(fernet, capsys, va
         assert "- github__v10" not in captured.out
 
 
+@pytest.mark.unit
 def test_set_tag_on_existing_label(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.save_vault") as mock_save:
@@ -283,6 +311,7 @@ def test_set_tag_on_existing_label(fernet, valid_vault):
         assert "development" in entry["tags"]
 
 
+@pytest.mark.unit
 def test_set_tag_preserves_existing_tags(fernet, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
@@ -304,6 +333,7 @@ def test_set_tag_preserves_existing_tags(fernet, valid_vault):
         assert tags == ["development", "business"]
 
 
+@pytest.mark.unit
 def test_set_multiple_tags(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.save_vault") as mock_save:
@@ -323,6 +353,7 @@ def test_set_multiple_tags(fernet, valid_vault):
         assert tags == ["development", "business", "personal"]
 
 
+@pytest.mark.unit
 def test_set_tag_does_not_duplicate_existing_tag(fernet, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
@@ -344,6 +375,7 @@ def test_set_tag_does_not_duplicate_existing_tag(fernet, valid_vault):
         assert tags == ["development"]
 
 
+@pytest.mark.unit
 def test_set_tag_does_not_create_version_backup(fernet, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
@@ -370,6 +402,7 @@ def test_set_tag_does_not_create_version_backup(fernet, valid_vault):
         mock_input.assert_not_called()
 
 
+@pytest.mark.unit
 def test_list_labels_filters_by_tag(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
@@ -383,6 +416,7 @@ def test_list_labels_filters_by_tag(fernet, capsys, valid_vault):
     assert "- twitter" not in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_returns_multiple_labels_with_tag(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
     valid_vault["alice"]["twitter"]["tags"] = ["development", "social"]
@@ -396,6 +430,7 @@ def test_list_labels_returns_multiple_labels_with_tag(fernet, capsys, valid_vaul
     assert "- twitter" in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_no_matching_tag(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["work"]
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
@@ -410,6 +445,7 @@ def test_list_labels_no_matching_tag(fernet, capsys, valid_vault):
     assert "- twitter" not in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_tag_filter_excludes_untagged_labels(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
@@ -422,6 +458,7 @@ def test_list_labels_tag_filter_excludes_untagged_labels(fernet, capsys, valid_v
     assert "- twitter" not in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_filters_by_multiple_tags(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
     valid_vault["alice"]["twitter"]["tags"] = ["development", "social"]
@@ -434,6 +471,7 @@ def test_list_labels_filters_by_multiple_tags(fernet, capsys, valid_vault):
     assert "- twitter" not in captured.out
 
 
+@pytest.mark.unit
 def test_list_labels_no_matching_multiple_tags(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["work"]
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
@@ -446,6 +484,7 @@ def test_list_labels_no_matching_multiple_tags(fernet, capsys, valid_vault):
     assert "No passwords found with tags: development, business." in captured.out
 
 
+@pytest.mark.unit
 def test_remove_tags_removes_existing_tag(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
 
@@ -458,6 +497,7 @@ def test_remove_tags_removes_existing_tag(valid_vault):
     mock_save_vault.assert_called_once_with(valid_vault)
 
 
+@pytest.mark.unit
 def test_remove_tags_handles_vault_load_failure(capsys):
     with patch("password_manager.core.load_vault", return_value=None), \
          patch("password_manager.core.save_vault") as mock_save_vault:
@@ -470,6 +510,7 @@ def test_remove_tags_handles_vault_load_failure(capsys):
     mock_save_vault.assert_not_called()
 
 
+@pytest.mark.unit
 def test_remove_tags_preserves_password_and_login(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
 
@@ -490,6 +531,7 @@ def test_remove_tags_preserves_password_and_login(valid_vault):
     mock_save_vault.assert_called_once_with(valid_vault)
 
 
+@pytest.mark.unit
 def test_remove_tags_removes_multiple_tags(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work", "personal"]
 
@@ -502,6 +544,7 @@ def test_remove_tags_removes_multiple_tags(valid_vault):
     mock_save_vault.assert_called_once_with(valid_vault)
 
 
+@pytest.mark.unit
 def test_remove_tags_removes_tags_field_when_last_tag_removed(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
@@ -516,6 +559,7 @@ def test_remove_tags_removes_tags_field_when_last_tag_removed(valid_vault):
     mock_save_vault.assert_called_once_with(valid_vault)
 
 
+@pytest.mark.unit
 def test_remove_tags_handles_label_without_tags(valid_vault):
     valid_vault["alice"]["github"].pop("tags", None)
 
@@ -528,6 +572,7 @@ def test_remove_tags_handles_label_without_tags(valid_vault):
     mock_save_vault.assert_not_called()
     
 
+@pytest.mark.unit
 def test_remove_tags_does_not_save_when_tag_does_not_exist(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
 
@@ -540,6 +585,7 @@ def test_remove_tags_does_not_save_when_tag_does_not_exist(valid_vault):
     mock_save_vault.assert_not_called()
 
 
+@pytest.mark.unit
 def test_remove_tags_removes_existing_tags_and_ignores_missing_tags(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work", "personal"]
 
@@ -552,6 +598,7 @@ def test_remove_tags_removes_existing_tags_and_ignores_missing_tags(valid_vault)
     mock_save_vault.assert_called_once_with(valid_vault)
 
 
+@pytest.mark.unit
 def test_remove_tags_handles_nonexistent_label(valid_vault, capsys):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("password_manager.core.save_vault") as mock_save_vault:
@@ -564,6 +611,7 @@ def test_remove_tags_handles_nonexistent_label(valid_vault, capsys):
     mock_save_vault.assert_not_called()
 
 
+@pytest.mark.unit
 def test_remove_tags_does_not_create_password_backup(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
 

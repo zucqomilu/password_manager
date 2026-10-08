@@ -1,10 +1,9 @@
-# tests/test_logger.py
+# tests/integration/test_logger.py
 import logging
-from password_manager import logger
 
-def test_logger_name():
-    assert logger.logger.name == "password_manager"
+import pytest
 
+@pytest.mark.integration
 def test_logging_writes_to_file(tmp_path):
     # Temporarily override LOG_FILE path for this test
     test_log_file = tmp_path / "test_vault.log"
