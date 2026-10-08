@@ -4,7 +4,10 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def get_data_dir():
-    return os.path.join(os.environ["XDG_DATA_HOME"], "password_manager")
+    return os.path.join(
+        os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+        "password_manager",
+    )
 
 # Allow environment variable overrides for testability; fallback to project paths
 def get_vault():
