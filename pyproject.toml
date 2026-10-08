@@ -9,6 +9,9 @@ dependencies = [
     "keyring==25.7.0",
 ]
 
+[project.scripts]
+pm = "password_manager.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
