@@ -8,7 +8,7 @@ def get_data_home():
     return xdg_data_home if os.path.isabs(xdg_data_home) else os.path.expanduser("~/.local/share")
 
 def get_data_dir():
-    return os.path.join(get_data_home(), "password_manager")
+    return os.environ.get("PM_DATA_DIR") or os.path.join(get_data_home(), "password_manager")
 
 # Allow environment variable overrides for testability; fallback to project paths
 def get_vault():

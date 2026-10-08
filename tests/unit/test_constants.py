@@ -3,6 +3,12 @@ import pytest
 from password_manager.constants import get_data_dir
 
 
+# Keep a PM_DATA_DIR exported in the developer's shell from leaking into these tests
+@pytest.fixture(autouse=True)
+def no_pm_data_dir(monkeypatch):
+    monkeypatch.delenv("PM_DATA_DIR", raising=False)
+
+
 @pytest.mark.unit
 def test_get_data_dir_defaults_to_xdg_data_home(monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", "/xdg/data")
@@ -28,3 +34,10 @@ def test_get_data_dir_ignores_relative_xdg_data_home(monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", "relative/data")
     monkeypatch.setenv("HOME", "/home/alice")
     assert get_data_dir() == "/home/alice/.local/share/password_manager"
+
+
+@pytest.mark.unit
+def test_get_data_dir_honors_pm_data_dir_override(monkeypatch):
+    monkeypatch.setenv("PM_DATA_DIR", "/custom/pm")
+    monkeypatch.setenv("XDG_DATA_HOME", "/xdg/data")
+    assert get_data_dir() == "/custom/pm"
