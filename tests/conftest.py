@@ -1,10 +1,20 @@
-import pytest, base64, json, builtins, tempfile, os, time
+import pytest, base64, json, builtins, tempfile, os, shutil, time
 import keyring
 from keyring.backends.null import Keyring as NullKeyring
 from keyring.errors import PasswordDeleteError
 from password_manager.crypto import derive_key
 from cryptography.fernet import Fernet
 from unittest.mock import mock_open, patch
+
+
+# Point PM_DATA_DIR at a throwaway folder before any test module imports the package
+# (logger.py opens vault.log at import), so no test run touches the real data dir
+def pytest_configure(config):
+    os.environ["PM_DATA_DIR"] = tempfile.mkdtemp(prefix="pm-tests-")
+
+
+def pytest_unconfigure(config):
+    shutil.rmtree(os.environ.pop("PM_DATA_DIR"), ignore_errors=True)
 
 
 test_keyring = {}
