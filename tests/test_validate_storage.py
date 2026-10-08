@@ -1,6 +1,6 @@
 import pytest, logging
 from .conftest import b64
-from src.validate_storage import validate_users, validate_vault, is_valid_base64
+from password_manager.validate_storage import validate_users, validate_vault, is_valid_base64
 
 
 # === is_valid_base64 ===

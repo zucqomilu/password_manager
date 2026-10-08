@@ -1,4 +1,4 @@
-from src.crypto import derive_key, generate_salt
+from password_manager.crypto import derive_key, generate_salt
 
 def test_generate_salt_length():
     salt = generate_salt()

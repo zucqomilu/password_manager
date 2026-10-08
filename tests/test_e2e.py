@@ -1,11 +1,11 @@
 import os, re, json
 from pathlib import Path
-from src.cli import main
-from src.session import load_session, clear_session
+from password_manager.cli import main
+from password_manager.session import load_session, clear_session
 from unittest.mock import patch
 from cryptography.fernet import Fernet
 
-from src.storage import load_vault
+from password_manager.storage import load_vault
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -195,7 +195,7 @@ def test_e2e_corrupted_session(capsys, set_test_env):
     register_and_login(username, password, capsys, main)
 
     with patch(
-        "src.session.keyring.get_password",
+        "password_manager.session.keyring.get_password",
         return_value="this is not json",
     ):
         main(["generate", label])

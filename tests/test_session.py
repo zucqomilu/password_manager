@@ -4,7 +4,7 @@ import json
 import base64
 from cryptography.fernet import Fernet
 
-from src.session import (
+from password_manager.session import (
     clear_session,
     load_session,
     refresh_session,

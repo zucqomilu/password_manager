@@ -1,6 +1,6 @@
 import logging
 from unittest.mock import patch
-from src.core import generate_password, save_password, get_password, list_labels, remove_tags
+from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags
 
 
 def test_generate_password():
@@ -16,8 +16,8 @@ def test_generate_password_length():
 
 
 def test_save_password_without_login(fernet):
-    with patch("src.core.load_vault", return_value={"alice": {}}), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value={"alice": {}}), \
+         patch("password_manager.core.save_vault") as mock_save:
         result = save_password("alice", "github", fernet, "supersecret")
         assert result is True
         saved = mock_save.call_args[0][0]
@@ -25,8 +25,8 @@ def test_save_password_without_login(fernet):
 
 
 def test_save_password_with_login(fernet):
-    with patch("src.core.load_vault", return_value={"alice": {}}), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value={"alice": {}}), \
+         patch("password_manager.core.save_vault") as mock_save:
         result = save_password("alice", "github", fernet, "supersecret", login="user@example.com")
         assert result is True
         saved = mock_save.call_args[0][0]
@@ -35,8 +35,8 @@ def test_save_password_with_login(fernet):
 
 
 def test_save_password_overwrite_prompt_no(caplog, fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.input", return_value='n'), \
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.input", return_value='n'), \
          caplog.at_level(logging.INFO):
         result = save_password("alice", "github", fernet, "newpass")
         assert result is False
@@ -45,8 +45,8 @@ def test_save_password_overwrite_prompt_no(caplog, fernet, valid_vault):
 
 def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
     valid_vault["alice"]["github"]["password"] = "notbase64==="
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.input", return_value='y'), \
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.input", return_value='y'), \
          caplog.at_level(logging.ERROR):
         result = save_password("alice", "github", fernet, "newpw")
         assert result is False
@@ -54,17 +54,17 @@ def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
 
 
 def test_save_password_new_label(fernet):
-    with patch("src.core.load_vault", return_value={}), \
-         patch("src.core.save_vault") as mock_save, \
-         patch("src.core.backup_vault"), \
-         patch("src.core.input", return_value='y'):
+    with patch("password_manager.core.load_vault", return_value={}), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.backup_vault"), \
+         patch("password_manager.core.input", return_value='y'):
         result = save_password("user1", "gmail", fernet, "pass123")
         assert result is True
         mock_save.assert_called_once()
 
 
 def test_save_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
-    with patch("src.core.load_vault", return_value=None), \
+    with patch("password_manager.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
         save_password("alice", "gmail", fernet, "securepw123")
         out = capsys.readouterr().out
@@ -73,9 +73,9 @@ def test_save_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fer
 
 
 def test_save_password_creates_correct_version_label(fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save, \
-         patch("src.core.backup_vault") as mock_backup, \
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.backup_vault") as mock_backup, \
          patch("builtins.input", return_value="y"), \
          patch("builtins.print"):
         result = save_password("alice", "twitter", fernet, "newtwitterpass12")
@@ -86,10 +86,10 @@ def test_save_password_creates_correct_version_label(fernet, valid_vault):
 
 
 def test_save_password_overwrite(fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save, \
-         patch("src.core.backup_vault") as mock_backup, \
-         patch("src.core.input", return_value='y'):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.input", return_value='y'):
         result = save_password("alice", "github", fernet, "newpass")
         assert result is True
         mock_backup.assert_called_once()
@@ -97,9 +97,9 @@ def test_save_password_overwrite(fernet, valid_vault):
 
 
 def test_save_password_user_declines_overwrite(fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save, \
-         patch("src.core.input", return_value='n'), \
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.input", return_value='n'), \
          patch("builtins.print") as mock_print:
         result = save_password("alice", "github", fernet, "newpass")
         assert result is False
@@ -109,9 +109,9 @@ def test_save_password_user_declines_overwrite(fernet, valid_vault):
 
 def test_save_password_overwrite_fails_on_bad_decryption(fernet, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invalid_encrypted_data:newpassword"
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save, \
-         patch("src.core.backup_vault") as mock_backup, \
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.backup_vault") as mock_backup, \
          patch("builtins.input", return_value="y"), \
          patch("builtins.print") as mock_print:
         assert not save_password("alice", "github", fernet, "newpassword")
@@ -121,8 +121,8 @@ def test_save_password_overwrite_fails_on_bad_decryption(fernet, valid_vault):
 
 
 def test_set_login_only(fernet):
-    with patch("src.core.load_vault", return_value={"bob": {}}), \
-         patch("src.core.save_vault") as mock_save, \
+    with patch("password_manager.core.load_vault", return_value={"bob": {}}), \
+         patch("password_manager.core.save_vault") as mock_save, \
          patch("builtins.print") as mock_print:
         assert not save_password("bob", "gitlab", login="bob@example.com", fernet=fernet)
         mock_save.assert_not_called()
@@ -130,8 +130,8 @@ def test_set_login_only(fernet):
 
 
 def test_set_password_only(fernet):
-    with patch("src.core.load_vault", return_value={"bob": {}}), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value={"bob": {}}), \
+         patch("password_manager.core.save_vault") as mock_save:
         assert save_password("bob", "gitlab", password="mysecretpassword", fernet=fernet)
         saved_data = mock_save.call_args[0][0]
         password_encrypted = saved_data["bob"]["gitlab"]["password"]
@@ -140,8 +140,8 @@ def test_set_password_only(fernet):
 
 
 def test_set_password_and_login(fernet):
-    with patch("src.core.load_vault", return_value={"bob": {}}), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value={"bob": {}}), \
+         patch("password_manager.core.save_vault") as mock_save:
         assert save_password("bob", "gitlab", password="mysecretpassword", login="bob@example.com", fernet=fernet)
         saved_data = mock_save.call_args[0][0]
         password_encrypted = saved_data["bob"]["gitlab"]["password"]
@@ -153,8 +153,8 @@ def test_set_password_and_login(fernet):
 
 
 def test_get_password_success(fernet, capsys, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.pyperclip.copy") as mock_clipboard:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy") as mock_clipboard:
         get_password("alice", "github", fernet, show=True)
         captured = capsys.readouterr()
         assert "supersecurepass1" in captured.out
@@ -162,7 +162,7 @@ def test_get_password_success(fernet, capsys, valid_vault):
 
 
 def test_get_password_with_login(capsys, fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), patch("pyperclip.copy"):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), patch("pyperclip.copy"):
         get_password("alice", "github", fernet, show=True)
         out = capsys.readouterr().out
         assert "Password: supersecurepass1" in out
@@ -170,7 +170,7 @@ def test_get_password_with_login(capsys, fernet, valid_vault):
 
 
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
-    with patch("src.core.load_vault", return_value=None), \
+    with patch("password_manager.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
         get_password("alice", "gmail", fernet)
         out = capsys.readouterr().out
@@ -180,14 +180,14 @@ def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fern
 
 def test_get_password_invalid_decryption(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invaliddata"
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         get_password("alice", "github", fernet)
         captured = capsys.readouterr()
         assert "Incorrect master password" in captured.out
 
 
 def test_get_password_label_not_found(fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("builtins.print") as mock_print:
         get_password("alice", "nonexistent", fernet)
         mock_print.assert_any_call("No password found for 'nonexistent'.")
@@ -195,7 +195,7 @@ def test_get_password_label_not_found(fernet, valid_vault):
 
 def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["password"] = "invaliddata"
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet)
         captured = capsys.readouterr()
         assert "- twitter" in captured.out
@@ -203,14 +203,14 @@ def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
 
 
 def test_list_labels_empty_user_vault(fernet):
-    with patch("src.core.load_vault", return_value={"testuser": {}}), \
+    with patch("password_manager.core.load_vault", return_value={"testuser": {}}), \
          patch("builtins.print") as mock_print:
         list_labels("testuser", fernet)
         mock_print.assert_any_call("No passwords found for this user.")
 
 
 def test_list_labels_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
-    with patch("src.core.load_vault", return_value=None), \
+    with patch("password_manager.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
         list_labels("alice", fernet)
         out = capsys.readouterr().out
@@ -219,7 +219,7 @@ def test_list_labels_logs_and_prints_on_vault_load_failure(capsys, caplog, ferne
 
 
 def test_list_labels_filters_versioned_backups(fernet, capsys, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet)
 
         captured = capsys.readouterr()
@@ -240,7 +240,7 @@ def test_list_labels_keeps_labels_with_similar_names(fernet, capsys, valid_vault
         "password": fernet.encrypt(b"abpassword").decode()
     }
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet)
 
         captured = capsys.readouterr()
@@ -255,7 +255,7 @@ def test_list_labels_filters_multiple_digit_versioned_backups(fernet, capsys, va
         "password": fernet.encrypt(b"oldpassword").decode()
     }
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet)
 
         captured = capsys.readouterr()
@@ -264,8 +264,8 @@ def test_list_labels_filters_multiple_digit_versioned_backups(fernet, capsys, va
 
 
 def test_set_tag_on_existing_label(fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save:
 
         result = save_password(
             "alice",
@@ -286,8 +286,8 @@ def test_set_tag_on_existing_label(fernet, valid_vault):
 def test_set_tag_preserves_existing_tags(fernet, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save:
 
         result = save_password(
             "alice",
@@ -305,8 +305,8 @@ def test_set_tag_preserves_existing_tags(fernet, valid_vault):
 
 
 def test_set_multiple_tags(fernet, valid_vault):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save:
 
         result = save_password(
             "alice",
@@ -326,8 +326,8 @@ def test_set_multiple_tags(fernet, valid_vault):
 def test_set_tag_does_not_duplicate_existing_tag(fernet, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save:
 
         result = save_password(
             "alice",
@@ -347,10 +347,10 @@ def test_set_tag_does_not_duplicate_existing_tag(fernet, valid_vault):
 def test_set_tag_does_not_create_version_backup(fernet, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save, \
-         patch("src.core.backup_vault") as mock_backup, \
-         patch("src.core.input") as mock_input:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.input") as mock_input:
 
         result = save_password("alice", "github", fernet, tags=["droppshipping"])
 
@@ -374,7 +374,7 @@ def test_list_labels_filters_by_tag(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
@@ -387,7 +387,7 @@ def test_list_labels_returns_multiple_labels_with_tag(fernet, capsys, valid_vaul
     valid_vault["alice"]["github"]["tags"] = ["development"]
     valid_vault["alice"]["twitter"]["tags"] = ["development", "social"]
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
@@ -400,7 +400,7 @@ def test_list_labels_no_matching_tag(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["work"]
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
@@ -413,7 +413,7 @@ def test_list_labels_no_matching_tag(fernet, capsys, valid_vault):
 def test_list_labels_tag_filter_excludes_untagged_labels(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet, tags=["development"])
 
     captured = capsys.readouterr()
@@ -426,7 +426,7 @@ def test_list_labels_filters_by_multiple_tags(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
     valid_vault["alice"]["twitter"]["tags"] = ["development", "social"]
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet, tags=["development", "work"])
 
     captured = capsys.readouterr()
@@ -438,7 +438,7 @@ def test_list_labels_no_matching_multiple_tags(fernet, capsys, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["work"]
     valid_vault["alice"]["twitter"]["tags"] = ["social"]
 
-    with patch("src.core.load_vault", return_value=valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
         list_labels("alice", fernet, tags=["development", "business"])
 
     captured = capsys.readouterr()
@@ -449,8 +449,8 @@ def test_list_labels_no_matching_multiple_tags(fernet, capsys, valid_vault):
 def test_remove_tags_removes_existing_tag(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development"])
 
@@ -459,8 +459,8 @@ def test_remove_tags_removes_existing_tag(valid_vault):
 
 
 def test_remove_tags_handles_vault_load_failure(capsys):
-    with patch("src.core.load_vault", return_value=None), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=None), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development"])
 
@@ -476,8 +476,8 @@ def test_remove_tags_preserves_password_and_login(valid_vault):
     original_password = valid_vault["alice"]["github"]["password"]
     original_login = valid_vault["alice"]["github"]["login"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development"])
 
@@ -493,8 +493,8 @@ def test_remove_tags_preserves_password_and_login(valid_vault):
 def test_remove_tags_removes_multiple_tags(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work", "personal"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development", "personal"])
 
@@ -505,8 +505,8 @@ def test_remove_tags_removes_multiple_tags(valid_vault):
 def test_remove_tags_removes_tags_field_when_last_tag_removed(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development"])
 
@@ -519,8 +519,8 @@ def test_remove_tags_removes_tags_field_when_last_tag_removed(valid_vault):
 def test_remove_tags_handles_label_without_tags(valid_vault):
     valid_vault["alice"]["github"].pop("tags", None)
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development"])
 
@@ -531,8 +531,8 @@ def test_remove_tags_handles_label_without_tags(valid_vault):
 def test_remove_tags_does_not_save_when_tag_does_not_exist(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["personal"])
 
@@ -543,8 +543,8 @@ def test_remove_tags_does_not_save_when_tag_does_not_exist(valid_vault):
 def test_remove_tags_removes_existing_tags_and_ignores_missing_tags(valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["development", "work", "personal"]
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development", "nonexistent"])
 
@@ -553,8 +553,8 @@ def test_remove_tags_removes_existing_tags_and_ignores_missing_tags(valid_vault)
 
 
 def test_remove_tags_handles_nonexistent_label(valid_vault, capsys):
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "nonexistent", tags=["development"])
 
@@ -569,8 +569,8 @@ def test_remove_tags_does_not_create_password_backup(valid_vault):
 
     original_labels = set(valid_vault["alice"])
 
-    with patch("src.core.load_vault", return_value=valid_vault), \
-         patch("src.core.save_vault") as mock_save_vault:
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save_vault:
 
         remove_tags("alice", "github", tags=["development"])
 

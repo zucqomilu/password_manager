@@ -1,6 +1,6 @@
 import json, base64, logging
 from unittest.mock import patch, mock_open
-from src.storage import load_vault, save_vault, load_users, save_users, backup_vault
+from password_manager.storage import load_vault, save_vault, load_users, save_users, backup_vault
 
 # === Helpers ===
 def valid_b64_string(length):
@@ -64,7 +64,7 @@ def test_load_users_returns_none_on_invalid_format(caplog, not_dict):
         assert load_users() is None
         assert "Loading failed: user validation failed." in caplog.text
 
-@patch("src.storage.validate_users", return_value=False)
+@patch("password_manager.storage.validate_users", return_value=False)
 def test_load_users_calls_validate(mock_validate, caplog):
     with patch("os.path.exists", return_value=True), \
          patch("builtins.open", mock_open(read_data="{}")), \
@@ -86,7 +86,7 @@ def test_load_users_unexpected_error(caplog):
 def test_save_users_writes_json(caplog, valid_user):
     m = mock_open()
     with patch("builtins.open", m), \
-         patch("src.constants.get_users", return_value="fake_users.json"), \
+         patch("password_manager.constants.get_users", return_value="fake_users.json"), \
          caplog.at_level(logging.DEBUG):
         save_users(valid_user)
         handle = m()
@@ -97,7 +97,7 @@ def test_save_users_writes_json(caplog, valid_user):
 def test_save_users_empty_dict():
     m = mock_open()
     with patch("builtins.open", m), \
-         patch("src.constants.get_users", return_value="fake_users.json"):
+         patch("password_manager.constants.get_users", return_value="fake_users.json"):
         save_users({})
         handle = m()
         written = ''.join(call.args[0] for call in handle.write.call_args_list)
@@ -106,7 +106,7 @@ def test_save_users_empty_dict():
 def test_save_users_uses_correct_path(valid_user):
     m = mock_open()
     with patch("builtins.open", m) as mock_open_fn, \
-         patch("src.constants.get_users", return_value="my_users.json"):
+         patch("password_manager.constants.get_users", return_value="my_users.json"):
         save_users(valid_user)
         mock_open_fn.assert_called_once_with("my_users.json", "w")
 
@@ -114,7 +114,7 @@ def test_save_users_invalid_schema_does_not_write(caplog, valid_user):
     m = mock_open()
     valid_user["alice"]["password"] = "invalid"
     with patch("builtins.open", m), \
-         patch("src.constants.get_users", return_value="fake_users.json"), \
+         patch("password_manager.constants.get_users", return_value="fake_users.json"), \
          caplog.at_level(logging.ERROR):
         save_users(valid_user)
         m.assert_not_called()
@@ -168,7 +168,7 @@ def test_load_vault_returns_none_on_invalid_format(caplog, invalid_json):
         assert load_vault() is None
         assert "Failed to decode vault file" in caplog.text
 
-@patch("src.storage.validate_vault", return_value=False)
+@patch("password_manager.storage.validate_vault", return_value=False)
 def test_load_vault_calls_validate(mock_validate, caplog):
     with patch("os.path.exists", return_value=True), \
          patch("builtins.open", mock_open(read_data="{}")), \
@@ -201,17 +201,17 @@ def test_save_vault_invalid_data_not_saved(caplog, valid_vault):
     valid_vault["alice"]["email"] = "invalid"
     m = mock_open()
     with patch("builtins.open", m), \
-         patch("src.constants.get_vault", return_value="vault.json"), \
+         patch("password_manager.constants.get_vault", return_value="vault.json"), \
          caplog.at_level(logging.ERROR):
         save_vault(valid_vault)
         m.assert_not_called()
         assert "Aborting save: vault validation failed" in caplog.text
 
 def test_backup_vault_creates_backup():
-    with patch("src.constants.get_vault", return_value="/fake/dir/vault.json"), \
+    with patch("password_manager.constants.get_vault", return_value="/fake/dir/vault.json"), \
          patch("os.path.exists", return_value=True), \
          patch("shutil.copy2") as mock_copy, \
-         patch("src.storage.logger") as mock_logger:
+         patch("password_manager.storage.logger") as mock_logger:
         backup_vault()
         assert mock_copy.called
         assert mock_logger.info.called

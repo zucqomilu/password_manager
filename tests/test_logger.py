@@ -1,6 +1,6 @@
 # tests/test_logger.py
 import logging
-from src import logger
+from password_manager import logger
 
 def test_logger_name():
     assert logger.logger.name == "password_manager"

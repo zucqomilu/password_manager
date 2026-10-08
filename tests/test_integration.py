@@ -1,9 +1,9 @@
 import pytest
 from pathlib import Path
-from src.user import register_user, authenticate_user
-from src.core import save_password, get_password
-from src.session import save_session, load_session, clear_session
-from src.storage import load_vault
+from password_manager.user import register_user, authenticate_user
+from password_manager.core import save_password, get_password
+from password_manager.session import save_session, load_session, clear_session
+from password_manager.storage import load_vault
 from cryptography.fernet import Fernet
 
 

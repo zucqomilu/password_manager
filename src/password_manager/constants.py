@@ -1,7 +1,7 @@
 import os
 
-# Base directory: one level up from src/
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Base directory: the repo root, two levels up from src/password_manager/
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Allow environment variable overrides for testability; fallback to project paths
 def get_vault():

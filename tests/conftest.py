@@ -1,6 +1,6 @@
 import pytest, base64, json, builtins, tempfile, os, time
 from keyring.errors import PasswordDeleteError
-from src.crypto import derive_key
+from password_manager.crypto import derive_key
 from cryptography.fernet import Fernet
 from unittest.mock import mock_open, patch
 
@@ -38,9 +38,9 @@ def set_test_env(monkeypatch):
         monkeypatch.setenv("VAULT_FILE", os.path.join(tmpdir, "vault.json"))
         monkeypatch.setenv("USERS_FILE", os.path.join(tmpdir, "users.json"))
 
-        monkeypatch.setattr("src.session.keyring.get_password", mock_get_password)
-        monkeypatch.setattr("src.session.keyring.set_password", mock_set_password)
-        monkeypatch.setattr("src.session.keyring.delete_password", mock_delete_password)
+        monkeypatch.setattr("password_manager.session.keyring.get_password", mock_get_password)
+        monkeypatch.setattr("password_manager.session.keyring.set_password", mock_set_password)
+        monkeypatch.setattr("password_manager.session.keyring.delete_password", mock_delete_password)
         
         yield tmpdir
 
@@ -52,7 +52,7 @@ def test_clock(monkeypatch):
     current_time = [time.time()]
 
     monkeypatch.setattr(
-        "src.session.time.time",
+        "password_manager.session.time.time",
         lambda: current_time[0],
     )
 
