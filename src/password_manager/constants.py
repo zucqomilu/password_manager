@@ -3,6 +3,9 @@ import os
 # Base directory: the repo root, two levels up from src/password_manager/
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def get_data_dir():
+    return os.path.join(os.environ["XDG_DATA_HOME"], "password_manager")
+
 # Allow environment variable overrides for testability; fallback to project paths
 def get_vault():
     return os.environ.get("VAULT_FILE", os.path.join(BASE_DIR, "vault.json"))
