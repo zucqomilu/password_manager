@@ -21,3 +21,10 @@ def test_get_data_dir_treats_empty_xdg_data_home_as_unset(monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", "")
     monkeypatch.setenv("HOME", "/home/alice")
     assert get_data_dir() == "/home/alice/.local/share/password_manager"
+
+
+@pytest.mark.unit
+def test_get_data_dir_ignores_relative_xdg_data_home(monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", "relative/data")
+    monkeypatch.setenv("HOME", "/home/alice")
+    assert get_data_dir() == "/home/alice/.local/share/password_manager"

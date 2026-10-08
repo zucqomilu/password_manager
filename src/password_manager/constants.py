@@ -3,11 +3,12 @@ import os
 # Base directory: the repo root, two levels up from src/password_manager/
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def get_data_home():
+    xdg_data_home = os.environ.get("XDG_DATA_HOME", "")
+    return xdg_data_home if os.path.isabs(xdg_data_home) else os.path.expanduser("~/.local/share")
+
 def get_data_dir():
-    return os.path.join(
-        os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
-        "password_manager",
-    )
+    return os.path.join(get_data_home(), "password_manager")
 
 # Allow environment variable overrides for testability; fallback to project paths
 def get_vault():
