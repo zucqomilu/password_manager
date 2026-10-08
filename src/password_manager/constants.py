@@ -12,6 +12,7 @@ def get_data_dir():
 
 def ensure_data_dir():
     os.makedirs(get_data_dir(), mode=0o700, exist_ok=True)
+    os.chmod(get_data_dir(), 0o700)
 
 # Allow environment variable overrides for testability; fallback to default paths
 def get_vault():
