@@ -1,5 +1,7 @@
 import logging
-from .constants import get_log
+from .constants import ensure_data_dir, get_log
+
+ensure_data_dir()
 
 logging.basicConfig(
     filename=get_log(),

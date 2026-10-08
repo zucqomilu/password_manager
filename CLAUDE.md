@@ -33,9 +33,10 @@ Module layers (dependencies point downward):
 - `session.py`: keyring-backed session.
 - `storage.py`: JSON load/save/backup. Every load and save goes through `validate_storage.py`.
 - `crypto.py`: PBKDF2 `derive_key` and `generate_salt`.
-- `constants.py`: paths, keyring IDs, TTL.
+- `constants.py`: data dir and file paths, keyring IDs, TTL.
 
 Key behaviors that span files:
+- **Data dir.** All data files live in `get_data_dir()`: `PM_DATA_DIR` if set, else `$XDG_DATA_HOME/password_manager` (only if absolute), else `~/.local/share/password_manager`. `ensure_data_dir()` creates it and forces `0700`; it runs when `logger.py` is imported, before `vault.log` is opened. `VAULT_FILE` / `USERS_FILE` still override the individual file paths.
 - **Two keys from one master password.** `derive_key(pw, auth_salt)` is stored in `users.json` as `"password"` and compared on login. `derive_key(pw + ":fernet", enc_salt)` is the Fernet key, which is never written to disk. It lives only in the OS keyring session (service `password_manager`, account `session`) along with the username and `last_activity`. The 15-minute TTL is checked in `load_session`.
 - **Vault shape:** `{username: {label: {"password": enc, "login": enc?, "tags": [plaintext]}}}`. The password and login are Fernet-encrypted per field. Tags are plaintext.
 - **Password overwrite versioning:** overwriting an existing password in `save_password` prompts for confirmation, moves the old password to `<label>__v<N>`, and calls `backup_vault()`, which writes `vault_backup_YYYYMMDD_HHMMSS.json` next to the vault. `is_versioned_backup()` recognizes these labels. Changes to the login or tags alone don't create a version or a backup.
@@ -46,9 +47,10 @@ Key behaviors that span files:
 - `tests/unit/test_layout.py` fails unless every test function has exactly one `@pytest.mark.unit|integration|e2e` decorator matching its directory. Module-level `pytestmark` doesn't count.
 - An autouse fixture in `tests/conftest.py` switches `keyring` to its null backend for every test, so no test can touch the real OS keyring.
 - `storage.py` reads paths through `password_manager.constants.get_vault()` / `get_users()` at call time. These functions honor the `VAULT_FILE` / `USERS_FILE` environment variables, which makes the paths patchable. Keep that indirection; don't import the values directly.
-- The `set_test_env` fixture in `tests/conftest.py` points both files at a temp dir and replaces `password_manager.session.keyring.*` with an in-memory dict. Any test that touches storage or sessions must use it. The repo root holds real `vault.json` / `users.json` files (gitignored), and the real keyring would otherwise be used.
+- The `set_test_env` fixture in `tests/conftest.py` points both files at a temp dir and replaces `password_manager.session.keyring.*` with an in-memory dict. Any test that touches storage or sessions must use it. Otherwise the real keyring would be used.
 - `test_clock` freezes `password_manager.session.time.time` for testing TTL expiry. `mock_session_keyring` reads and writes the raw session entry.
-- `vault.log` always goes to the repo root because `get_log()` has no override. `src/password_manager/logger.py` is excluded from coverage in `pyproject.toml`.
+- `pytest_configure` in `tests/conftest.py` points `PM_DATA_DIR` at a throwaway temp dir before any test module imports the package, so no test run can touch the real data dir or a copy exported in the shell. `src/password_manager/logger.py` is excluded from coverage in `pyproject.toml`.
+- To run `pm` by hand against a copy of real data, point `PM_DATA_DIR` at the copy. Never run feature-branch code against the real data dir.
 - E2E tests drive `password_manager.cli.main([...])` with `--username`/`--password` flags and assert on `capsys` output.
 
 ## Scope of convention changes
