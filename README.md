@@ -153,6 +153,14 @@ This means that normal application operation no longer creates or depends on a `
 
 The application currently uses JSON files for persistent application data.
 
+All files are stored in the data directory, which is created with `0700` permissions (only your user can open it):
+
+1. `$PM_DATA_DIR`, if set.
+2. Otherwise `$XDG_DATA_HOME/password_manager`, if `XDG_DATA_HOME` is set to an absolute path.
+3. Otherwise `~/.local/share/password_manager`.
+
+Earlier versions stored these files in the repository root.
+
 ### `users.json`
 
 Stores registered users and the cryptographic information required to authenticate them.
@@ -208,7 +216,7 @@ Removing or adding tags does **not** create a versioned password entry or vault 
 
 ### `vault.log`
 
-Application logging is written to `vault.log`.
+Application logging is written to `vault.log` in the data directory.
 
 The log contains operational information useful for debugging and auditing application behavior. Sensitive credential values should not be stored in the log.
 
@@ -553,6 +561,14 @@ Stored labels:
 
 The locations of the vault and user database can be overridden through environment variables.
 
+### `PM_DATA_DIR`
+
+Overrides the whole data directory. Useful for running against a copy of your data:
+
+```bash
+PM_DATA_DIR=/tmp/pm-copy pm list
+```
+
 ### `VAULT_FILE`
 
 Overrides the default `vault.json` location.
@@ -633,7 +649,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
 
-The current test suite contains **191 tests**.
+The current test suite contains **203 tests**.
 
 Coverage can be generated with:
 
@@ -644,8 +660,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-463 statements
-463 statements covered
+470 statements
+470 statements covered
 100% coverage
 ```
 
@@ -691,9 +707,10 @@ The security of the vault also depends on protecting the local filesystem.
 
 Users should protect:
 
-* `vault.json`
-* `users.json`
-* Vault backups
+* The data directory (`~/.local/share/password_manager` by default), which holds:
+  * `vault.json`
+  * `users.json`
+  * Vault backups
 * The user's operating-system account
 * The operating-system keyring
 
