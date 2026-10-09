@@ -109,6 +109,9 @@ def main(argv=None):
         list_labels(username, fernet, tags=args.tags)
     elif args.command == 'verify':
         result = verify_vault(username, fernet)
+        if result is None:
+            print("Failed to load password vault. The vault may be corrupted or unreadable.")
+            return
         print(f"{result['ok']} entries OK")
         for label in result["bad_password"]:
             print(f"Password failed to decrypt: {label}")
