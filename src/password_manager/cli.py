@@ -2,7 +2,7 @@ import argparse
 import getpass
 from .logger import logger
 from .user import register_user, authenticate_user
-from .core import save_password, get_password, list_labels, generate_password, remove_tags
+from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault
 from .session import load_session, save_session, clear_session, refresh_session
 
 def main(argv=None):
@@ -48,6 +48,9 @@ def main(argv=None):
     # === LIST ===
     list_parser = subparsers.add_parser('list', help='List all saved password labels')
     list_parser.add_argument('--tag', nargs='+', dest='tags', help='Only list labels with these tags')
+
+    # === VERIFY ===
+    subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')
 
     args = parser.parse_args(argv)
 
@@ -104,5 +107,12 @@ def main(argv=None):
         remove_tags(username, args.label, tags=args.tags)
     elif args.command == 'list':
         list_labels(username, fernet, tags=args.tags)
+    elif args.command == 'verify':
+        result = verify_vault(username, fernet)
+        print(f"{result['ok']} entries OK")
+        for label in result["bad_password"]:
+            print(f"Password failed to decrypt: {label}")
+        for label in result["bad_login"]:
+            print(f"Login failed to decrypt: {label}")
     else:
         parser.print_help()
