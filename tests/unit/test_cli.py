@@ -195,3 +195,26 @@ def test_remove_command_with_multiple_tags():
             'github',
             tags=['development', 'work']
         )
+
+
+@pytest.mark.unit
+def test_verify_command_prints_verification_summary(capsys):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.refresh_session'), \
+         patch('password_manager.cli.verify_vault', return_value={"ok": 2, "bad_password": ["gitlab"], "bad_login": ["github"]}) as mock_verify_vault:
+        run_cli_with_args(['prog', 'verify'])
+        mock_verify_vault.assert_called_once_with('testuser', b'fernet')
+        assert capsys.readouterr().out == (
+            "2 entries OK\n"
+            "Password failed to decrypt: gitlab\n"
+            "Login failed to decrypt: github\n"
+        )
+
+
+@pytest.mark.unit
+def test_verify_command_prints_error_when_vault_cannot_be_loaded(capsys):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.refresh_session'), \
+         patch('password_manager.cli.verify_vault', return_value=None):
+        run_cli_with_args(['prog', 'verify'])
+        assert capsys.readouterr().out == "Failed to load password vault. The vault may be corrupted or unreadable.\n"

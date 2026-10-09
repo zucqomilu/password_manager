@@ -20,3 +20,4 @@ base64
 .env
 TODO.org
 .#*
+build/

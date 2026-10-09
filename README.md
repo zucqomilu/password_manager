@@ -15,6 +15,8 @@ The project is currently intended for **learning and personal use**, with the lo
 * Tag-based password organization, filtering, and removal
 * Multiple users supported
 * Automatic vault backups when overwriting passwords
+* Atomic saves: a crash or full disk never leaves a half-written vault or users file
+* `pm verify` checks that every stored password and login still decrypts
 * Session persistence through the operating system's keyring
 * 15-minute session expiration
 * Automatic session activity refresh
@@ -161,6 +163,8 @@ All files are stored in the data directory, which is created with `0700` permiss
 
 Earlier versions stored these files in the repository root.
 
+`vault.json` and `users.json` are saved atomically: the new content is written to a temporary file in the same directory, flushed to disk, then renamed over the old file. Both files end up with `0600` permissions (readable only by your user).
+
 ### `users.json`
 
 Stores registered users and the cryptographic information required to authenticate them.
@@ -279,6 +283,7 @@ set
 get
 remove
 list
+verify
 ```
 
 ### Register a user
@@ -557,6 +562,24 @@ Stored labels:
 - email
 ```
 
+### Verify the vault
+
+Check that every entry, including versioned backups, still decrypts with your master password:
+
+```bash
+pm verify
+```
+
+Example:
+
+```text
+3 entries OK
+Password failed to decrypt: gitlab
+Login failed to decrypt: github
+```
+
+Only labels are printed, never passwords or logins. The vault is not modified.
+
 ## Environment Variables
 
 The locations of the vault and user database can be overridden through environment variables.
@@ -649,7 +672,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
 
-The current test suite contains **203 tests**.
+The current test suite contains **215 tests**.
 
 Coverage can be generated with:
 
@@ -660,8 +683,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-470 statements
-470 statements covered
+510 statements
+510 statements covered
 100% coverage
 ```
 

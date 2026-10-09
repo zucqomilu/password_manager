@@ -1,4 +1,4 @@
-import shutil, json, os
+import shutil, json, os, tempfile
 from datetime import datetime
 from .logger import logger
 from .validate_storage import validate_users, validate_vault
@@ -33,8 +33,7 @@ def save_users(users):
         return
     
     logger.debug(f"Saving users to {password_manager.constants.get_users()}: {json.dumps(users, indent=2)}")
-    with open(password_manager.constants.get_users(), 'w') as f:
-        json.dump(users, f, indent=4)
+    write_json_atomically(password_manager.constants.get_users(), users)
 
 def load_vault():
     path = password_manager.constants.get_vault()
@@ -64,8 +63,22 @@ def save_vault(data):
         return
 
     logger.debug(f"Saving vault to {password_manager.constants.get_vault()}: {json.dumps(data, indent=2)}")
-    with open(password_manager.constants.get_vault(), 'w') as f:
-        json.dump(data, f, indent=4)
+    write_json_atomically(password_manager.constants.get_vault(), data)
+
+# Write to a temp file in the target's folder, flush it to disk, then rename it over the target,
+# so a crash mid-write leaves either the complete old file or the complete new one
+def write_json_atomically(path, data):
+    f = tempfile.NamedTemporaryFile('w', dir=os.path.dirname(path), delete=False)
+    try:
+        with f:
+            json.dump(data, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(f.name, path)
+    # Remove the temp file on any failure (including Ctrl+C) so no stray vault copy is left behind
+    except BaseException:
+        os.remove(f.name)
+        raise
 
 def backup_vault():
     vault_path = password_manager.constants.get_vault()
