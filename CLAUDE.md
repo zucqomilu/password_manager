@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 source .venv/bin/activate
 pip install -e ".[dev]"                  # editable install from pyproject.toml
 
-python main.py <command> [args]          # register | login | logout | generate | set | get | remove | list
+python main.py <command> [args]          # register | login | logout | generate | set | get | remove | list | verify
 
 pytest -m unit                           # day-to-day loop
 pytest -m "unit or integration"          # before merging a feature branch
@@ -29,9 +29,9 @@ There is no linter or build step configured.
 
 Module layers (dependencies point downward):
 - `cli.py`: arg parsing and I/O prompts.
-- `user.py` (register/authenticate) and `core.py` (vault operations: `save_password`, `get_password`, `list_labels`, `remove_tags`, `generate_password`).
+- `user.py` (register/authenticate) and `core.py` (vault operations: `save_password`, `get_password`, `list_labels`, `remove_tags`, `generate_password`, `verify_vault`).
 - `session.py`: keyring-backed session.
-- `storage.py`: JSON load/save/backup. Every load and save goes through `validate_storage.py`.
+- `storage.py`: JSON load/save/backup. Every load and save goes through `validate_storage.py`. Saves go through `write_json_atomically()` (temp file in the same dir, fsync, `os.replace`; the temp file is removed on failure), which also leaves the files `0600`.
 - `crypto.py`: PBKDF2 `derive_key` and `generate_salt`.
 - `constants.py`: data dir and file paths, keyring IDs, TTL.
 
