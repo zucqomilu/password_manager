@@ -22,3 +22,19 @@ def test_save_vault_writes_via_temp_file_and_os_replace(set_test_env, monkeypatc
     assert os.listdir(set_test_env) == ["vault.json"]
     with open(os.environ["VAULT_FILE"]) as f:
         assert json.load(f) == valid_vault
+
+
+@pytest.mark.integration
+def test_save_vault_leaves_original_vault_intact_when_write_fails(set_test_env, monkeypatch, valid_vault):
+    save_vault(valid_vault)
+
+    def failing_fsync(fd):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(os, "fsync", failing_fsync)
+    with pytest.raises(OSError):
+        save_vault({"alice": {}})
+
+    assert os.listdir(set_test_env) == ["vault.json"]
+    with open(os.environ["VAULT_FILE"]) as f:
+        assert json.load(f) == valid_vault

@@ -69,11 +69,17 @@ def save_vault(data):
 # Write to a temp file in the target's folder, flush it to disk, then rename it over the target,
 # so a crash mid-write leaves either the complete old file or the complete new one
 def write_json_atomically(path, data):
-    with tempfile.NamedTemporaryFile('w', dir=os.path.dirname(path), delete=False) as f:
-        json.dump(data, f, indent=4)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(f.name, path)
+    f = tempfile.NamedTemporaryFile('w', dir=os.path.dirname(path), delete=False)
+    try:
+        with f:
+            json.dump(data, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(f.name, path)
+    # Remove the temp file on any failure (including Ctrl+C) so no stray vault copy is left behind
+    except BaseException:
+        os.remove(f.name)
+        raise
 
 def backup_vault():
     vault_path = password_manager.constants.get_vault()
