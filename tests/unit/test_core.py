@@ -646,3 +646,9 @@ def test_verify_vault_reports_labels_whose_login_fails_to_decrypt(fernet, valid_
     valid_vault["alice"]["github"]["login"] = Fernet(Fernet.generate_key()).encrypt(b"alice@example.com").decode()
     with patch("password_manager.core.load_vault", return_value=valid_vault):
         assert verify_vault("alice", fernet) == {"ok": 2, "bad_password": [], "bad_login": ["github"]}
+
+
+@pytest.mark.unit
+def test_verify_vault_returns_none_when_vault_cannot_be_loaded(fernet):
+    with patch("password_manager.core.load_vault", return_value=None):
+        assert verify_vault("alice", fernet) is None
