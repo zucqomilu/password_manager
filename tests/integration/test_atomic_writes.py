@@ -6,16 +6,22 @@ import pytest
 from password_manager.storage import save_users, save_vault
 
 
-@pytest.mark.integration
-def test_save_vault_writes_via_temp_file_and_os_replace(set_test_env, monkeypatch, valid_vault):
+# Record (temp file folder, target) for every os.replace call, while still doing the real rename
+@pytest.fixture
+def replace_calls(monkeypatch):
     real_replace = os.replace
-    replace_calls = []
+    calls = []
 
     def recording_replace(src, dst):
-        replace_calls.append((os.path.dirname(src), dst))
+        calls.append((os.path.dirname(src), dst))
         real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", recording_replace)
+    return calls
+
+
+@pytest.mark.integration
+def test_save_vault_writes_via_temp_file_and_os_replace(set_test_env, replace_calls, valid_vault):
     save_vault(valid_vault)
 
     assert replace_calls == [(set_test_env, os.environ["VAULT_FILE"])]
@@ -41,15 +47,7 @@ def test_save_vault_leaves_original_vault_intact_when_write_fails(set_test_env, 
 
 
 @pytest.mark.integration
-def test_save_users_writes_via_temp_file_and_os_replace(set_test_env, monkeypatch, valid_user):
-    real_replace = os.replace
-    replace_calls = []
-
-    def recording_replace(src, dst):
-        replace_calls.append((os.path.dirname(src), dst))
-        real_replace(src, dst)
-
-    monkeypatch.setattr(os, "replace", recording_replace)
+def test_save_users_writes_via_temp_file_and_os_replace(set_test_env, replace_calls, valid_user):
     save_users(valid_user)
 
     assert replace_calls == [(set_test_env, os.environ["USERS_FILE"])]
