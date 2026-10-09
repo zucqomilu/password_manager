@@ -66,3 +66,14 @@ def test_save_vault_sets_0600_permissions_on_vault_file(set_test_env, valid_vaul
     save_vault(valid_vault)
 
     assert stat.S_IMODE(os.stat(os.environ["VAULT_FILE"]).st_mode) == 0o600
+
+
+@pytest.mark.integration
+def test_save_users_sets_0600_permissions_on_users_file(set_test_env, valid_user):
+    with open(os.environ["USERS_FILE"], "w") as f:
+        json.dump({}, f)
+    os.chmod(os.environ["USERS_FILE"], 0o644)
+
+    save_users(valid_user)
+
+    assert stat.S_IMODE(os.stat(os.environ["USERS_FILE"]).st_mode) == 0o600
