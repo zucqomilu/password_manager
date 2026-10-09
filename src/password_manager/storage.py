@@ -33,8 +33,7 @@ def save_users(users):
         return
     
     logger.debug(f"Saving users to {password_manager.constants.get_users()}: {json.dumps(users, indent=2)}")
-    with open(password_manager.constants.get_users(), 'w') as f:
-        json.dump(users, f, indent=4)
+    write_json_atomically(password_manager.constants.get_users(), users)
 
 def load_vault():
     path = password_manager.constants.get_vault()
