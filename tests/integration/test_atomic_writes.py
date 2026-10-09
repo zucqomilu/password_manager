@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 
 import pytest
 
@@ -54,3 +55,14 @@ def test_save_users_writes_via_temp_file_and_os_replace(set_test_env, replace_ca
     assert os.listdir(set_test_env) == ["users.json"]
     with open(os.environ["USERS_FILE"]) as f:
         assert json.load(f) == valid_user
+
+
+@pytest.mark.integration
+def test_save_vault_sets_0600_permissions_on_vault_file(set_test_env, valid_vault):
+    with open(os.environ["VAULT_FILE"], "w") as f:
+        json.dump({}, f)
+    os.chmod(os.environ["VAULT_FILE"], 0o644)
+
+    save_vault(valid_vault)
+
+    assert stat.S_IMODE(os.stat(os.environ["VAULT_FILE"]).st_mode) == 0o600
