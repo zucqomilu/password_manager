@@ -203,4 +203,5 @@ def decrypts(fernet, token):
 def verify_vault(username, fernet):
     entries = load_vault().get(username, {})
     bad_password = [label for label, entry in entries.items() if not decrypts(fernet, entry["password"])]
-    return {"ok": len(entries) - len(bad_password), "bad_password": bad_password}
+    bad_login = [label for label, entry in entries.items() if "login" in entry and not decrypts(fernet, entry["login"])]
+    return {"ok": len(entries.keys() - {*bad_password, *bad_login}), "bad_password": bad_password, "bad_login": bad_login}

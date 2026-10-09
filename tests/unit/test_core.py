@@ -639,3 +639,10 @@ def test_verify_vault_reports_labels_whose_password_fails_to_decrypt(fernet, val
     valid_vault["alice"]["gitlab"] = {"password": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()}
     with patch("password_manager.core.load_vault", return_value=valid_vault):
         assert verify_vault("alice", fernet)["bad_password"] == ["gitlab"]
+
+
+@pytest.mark.unit
+def test_verify_vault_reports_labels_whose_login_fails_to_decrypt(fernet, valid_vault):
+    valid_vault["alice"]["github"]["login"] = Fernet(Fernet.generate_key()).encrypt(b"alice@example.com").decode()
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
+        assert verify_vault("alice", fernet) == {"ok": 2, "bad_password": [], "bad_login": ["github"]}
