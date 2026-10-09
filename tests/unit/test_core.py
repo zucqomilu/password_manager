@@ -632,3 +632,10 @@ def test_verify_vault_returns_count_of_entries_that_decrypt(fernet, valid_vault)
     valid_vault["alice"]["gitlab"] = {"password": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()}
     with patch("password_manager.core.load_vault", return_value=valid_vault):
         assert verify_vault("alice", fernet)["ok"] == 3
+
+
+@pytest.mark.unit
+def test_verify_vault_reports_labels_whose_password_fails_to_decrypt(fernet, valid_vault):
+    valid_vault["alice"]["gitlab"] = {"password": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()}
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
+        assert verify_vault("alice", fernet)["bad_password"] == ["gitlab"]

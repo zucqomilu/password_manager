@@ -201,4 +201,6 @@ def decrypts(fernet, token):
 
 # Check every entry, versioned backups included, without ever returning or logging a decrypted value
 def verify_vault(username, fernet):
-    return {"ok": sum(decrypts(fernet, entry["password"]) for entry in load_vault().get(username, {}).values())}
+    entries = load_vault().get(username, {})
+    bad_password = [label for label, entry in entries.items() if not decrypts(fernet, entry["password"])]
+    return {"ok": len(entries) - len(bad_password), "bad_password": bad_password}
