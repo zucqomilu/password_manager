@@ -2,6 +2,7 @@ import re
 import string
 import secrets
 import pyperclip
+from cryptography.fernet import InvalidToken
 from .logger import logger
 from .storage import load_vault, backup_vault, save_vault
 
@@ -188,3 +189,16 @@ def remove_tags(username, label, tags):
         entry.pop("tags", None)
 
     save_vault(vault)
+
+
+def decrypts(fernet, token):
+    try:
+        fernet.decrypt(token.encode())
+        return True
+    except InvalidToken:
+        return False
+
+
+# Check every entry, versioned backups included, without ever returning or logging a decrypted value
+def verify_vault(username, fernet):
+    return {"ok": sum(decrypts(fernet, entry["password"]) for entry in load_vault().get(username, {}).values())}
