@@ -661,3 +661,12 @@ def test_delete_label_removes_label_from_users_vault(valid_vault):
          patch("builtins.input", return_value="y"):
         delete_label("alice", "github")
         assert mock_save.call_args.args[0]["alice"].keys() == {"twitter", "twitter__v1"}
+
+
+@pytest.mark.unit
+def test_delete_label_does_not_remove_the_labels_versions(valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "twitter")
+        assert mock_save.call_args.args[0]["alice"].keys() == {"github", "twitter__v1"}
