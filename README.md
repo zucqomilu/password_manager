@@ -13,6 +13,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * Password retrieval and clipboard integration
 * Password/login management by label
 * Tag-based password organization, filtering, and removal
+* `pm delete` removes a label after confirmation, with a vault backup made first
 * Multiple users supported
 * Automatic vault backups when overwriting passwords
 * Atomic saves: a crash or full disk never leaves a half-written vault or users file
@@ -282,6 +283,7 @@ generate
 set
 get
 remove
+delete
 list
 verify
 ```
@@ -531,6 +533,24 @@ pm get github --show
 
 Displaying passwords in the terminal should be avoided when unnecessary.
 
+### Delete a label
+
+Delete a stored label:
+
+```bash
+pm delete github
+```
+
+You are asked to confirm first:
+
+```text
+Delete 'github'? A backup is made first. (y/N):
+```
+
+Only `y` deletes; anything else prints `Operation cancelled.` and leaves the vault untouched. Before deleting, a `vault_backup_YYYYMMDD_HHMMSS.json` copy of the vault is written next to it.
+
+The label's previous versions (`github__v1`, `github__v2`, ...) are **kept**. They are hidden from `pm list` but can still be read with `pm get github__v1`, or deleted individually with `pm delete github__v1`. Labels that merely start with the same text, such as `github-work`, are never affected.
+
 ### List stored labels
 
 List all stored password labels:
@@ -672,7 +692,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
 
-The current test suite contains **215 tests**.
+The current test suite contains **226 tests**.
 
 Coverage can be generated with:
 
@@ -683,8 +703,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-510 statements
-510 statements covered
+528 statements
+528 statements covered
 100% coverage
 ```
 
