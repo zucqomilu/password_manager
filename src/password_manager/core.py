@@ -212,4 +212,5 @@ def verify_vault(username, fernet):
 
 def delete_label(username, label):
     vault = load_vault()
+    backup_vault()
     save_vault({**vault, username: {name: entry for name, entry in vault[username].items() if name != label}})

@@ -1,6 +1,6 @@
 import pytest
 import logging
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
 from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
 
@@ -681,3 +681,14 @@ def test_delete_label_leaves_labels_that_only_share_a_prefix_untouched(valid_vau
          patch("builtins.input", return_value="y"):
         delete_label("alice", "github")
         assert mock_save.call_args.args[0]["alice"].keys() == {"github-work", "githubv1", "twitter", "twitter__v1"}
+
+
+@pytest.mark.unit
+def test_delete_label_backs_up_vault_before_deleting(valid_vault):
+    calls = Mock()
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.backup_vault", calls.backup_vault), \
+         patch("password_manager.core.save_vault", calls.save_vault), \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "github")
+        assert calls.mock_calls == [call.backup_vault(), call.save_vault(ANY)]
