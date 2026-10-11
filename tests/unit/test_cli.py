@@ -1,7 +1,8 @@
+import argparse
 import pytest
 import re
 import sys
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 from password_manager import cli
 
 
@@ -235,3 +236,14 @@ def test_build_parser_returns_parser_with_every_subcommand():
     assert re.search(r"\{(.+?)\}", cli.build_parser().format_help()).group(1).split(",") == [
         "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify",
     ]
+
+
+@pytest.mark.unit
+def test_main_calls_argcomplete_autocomplete_before_parse_args():
+    calls = Mock()
+    calls.parser.parse_args.return_value = argparse.Namespace(command='logout')
+    with patch('password_manager.cli.build_parser', return_value=calls.parser), \
+         patch('password_manager.cli.argcomplete', calls.argcomplete), \
+         patch('password_manager.cli.clear_session'):
+        cli.main(['logout'])
+        assert calls.mock_calls[:2] == [call.argcomplete.autocomplete(calls.parser), call.parser.parse_args(['logout'])]

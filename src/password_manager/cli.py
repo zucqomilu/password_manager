@@ -1,5 +1,6 @@
 import argparse
 import getpass
+import argcomplete
 from .logger import logger
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label
@@ -60,6 +61,7 @@ def build_parser():
 
 def main(argv=None):
     parser = build_parser()
+    argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
 
     # === REGISTER USER ===
