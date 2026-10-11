@@ -1,4 +1,5 @@
 import pytest
+import re
 import sys
 from unittest.mock import patch
 from password_manager import cli
@@ -227,3 +228,10 @@ def test_delete_command_calls_delete_label_for_given_label():
          patch('password_manager.cli.delete_label') as mock_delete_label:
         run_cli_with_args(['prog', 'delete', 'github'])
         mock_delete_label.assert_called_once_with('testuser', 'github')
+
+
+@pytest.mark.unit
+def test_build_parser_returns_parser_with_every_subcommand():
+    assert re.search(r"\{(.+?)\}", cli.build_parser().format_help()).group(1).split(",") == [
+        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify",
+    ]

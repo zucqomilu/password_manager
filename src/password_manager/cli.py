@@ -5,7 +5,7 @@ from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label
 from .session import load_session, save_session, clear_session, refresh_session
 
-def main(argv=None):
+def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
 
@@ -56,6 +56,10 @@ def main(argv=None):
     # === VERIFY ===
     subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')
 
+    return parser
+
+def main(argv=None):
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     # === REGISTER USER ===
