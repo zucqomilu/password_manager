@@ -24,3 +24,8 @@ def test_completing_pm_lists_all_subcommands():
     assert [word for word in complete("pm ") if not word.startswith("-")] == [
         "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify",
     ]
+
+
+@pytest.mark.unit
+def test_completing_pm_set_dashes_lists_the_set_commands_flags():
+    assert complete("pm set --") == ["--help", "--password", "--login", "--tag"]
