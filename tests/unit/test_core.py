@@ -2,7 +2,7 @@ import pytest
 import logging
 from unittest.mock import patch
 from cryptography.fernet import Fernet
-from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault
+from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
 
 
 @pytest.mark.unit
@@ -652,3 +652,12 @@ def test_verify_vault_reports_labels_whose_login_fails_to_decrypt(fernet, valid_
 def test_verify_vault_returns_none_when_vault_cannot_be_loaded(fernet):
     with patch("password_manager.core.load_vault", return_value=None):
         assert verify_vault("alice", fernet) is None
+
+
+@pytest.mark.unit
+def test_delete_label_removes_label_from_users_vault(valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "github")
+        assert mock_save.call_args.args[0]["alice"].keys() == {"twitter", "twitter__v1"}

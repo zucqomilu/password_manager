@@ -208,3 +208,8 @@ def verify_vault(username, fernet):
     bad_password = [label for label, entry in entries.items() if not decrypts(fernet, entry["password"])]
     bad_login = [label for label, entry in entries.items() if "login" in entry and not decrypts(fernet, entry["login"])]
     return {"ok": len(entries.keys() - {*bad_password, *bad_login}), "bad_password": bad_password, "bad_login": bad_login}
+
+
+def delete_label(username, label):
+    vault = load_vault()
+    save_vault({**vault, username: {name: entry for name, entry in vault[username].items() if name != label}})
