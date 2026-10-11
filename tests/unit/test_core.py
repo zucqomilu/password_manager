@@ -718,3 +718,16 @@ def test_delete_label_reports_error_for_label_that_does_not_exist(valid_vault, c
         mock_backup.assert_not_called()
         mock_save.assert_not_called()
         assert capsys.readouterr().out == "Password label 'gitlab' not found.\n"
+
+
+@pytest.mark.unit
+def test_delete_label_reports_error_when_vault_cannot_be_loaded(capsys):
+    with patch("password_manager.core.load_vault", return_value=None), \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input") as mock_input:
+        delete_label("alice", "github")
+        mock_input.assert_not_called()
+        mock_backup.assert_not_called()
+        mock_save.assert_not_called()
+        assert capsys.readouterr().out == "Failed to load password vault. The vault may be corrupted or unreadable.\n"

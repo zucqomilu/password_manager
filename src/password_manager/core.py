@@ -212,6 +212,10 @@ def verify_vault(username, fernet):
 
 def delete_label(username, label):
     vault = load_vault()
+    if vault is None:
+        print("Failed to load password vault. The vault may be corrupted or unreadable.")
+        logger.error("Vault loading failed: returned None.")
+        return
     if label not in vault.get(username, {}):
         print(f"Password label '{label}' not found.")
         return
