@@ -208,3 +208,19 @@ def verify_vault(username, fernet):
     bad_password = [label for label, entry in entries.items() if not decrypts(fernet, entry["password"])]
     bad_login = [label for label, entry in entries.items() if "login" in entry and not decrypts(fernet, entry["login"])]
     return {"ok": len(entries.keys() - {*bad_password, *bad_login}), "bad_password": bad_password, "bad_login": bad_login}
+
+
+def delete_label(username, label):
+    vault = load_vault()
+    if vault is None:
+        print("Failed to load password vault. The vault may be corrupted or unreadable.")
+        logger.error("Vault loading failed: returned None.")
+        return
+    if label not in vault.get(username, {}):
+        print(f"Password label '{label}' not found.")
+        return
+    if input(f"Delete '{label}'? A backup is made first. (y/N): ").strip().lower() != 'y':
+        print("Operation cancelled.")
+        return
+    backup_vault()
+    save_vault({**vault, username: {name: entry for name, entry in vault[username].items() if name != label}})

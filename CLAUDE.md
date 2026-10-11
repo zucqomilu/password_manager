@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 source .venv/bin/activate
 pip install -e ".[dev]"                  # editable install from pyproject.toml
 
-python main.py <command> [args]          # register | login | logout | generate | set | get | remove | list | verify
+python main.py <command> [args]          # register | login | logout | generate | set | get | remove | delete | list | verify
 
 pytest -m unit                           # day-to-day loop
 pytest -m "unit or integration"          # before merging a feature branch
@@ -29,7 +29,7 @@ There is no linter or build step configured.
 
 Module layers (dependencies point downward):
 - `cli.py`: arg parsing and I/O prompts.
-- `user.py` (register/authenticate) and `core.py` (vault operations: `save_password`, `get_password`, `list_labels`, `remove_tags`, `generate_password`, `verify_vault`).
+- `user.py` (register/authenticate) and `core.py` (vault operations: `save_password`, `get_password`, `list_labels`, `remove_tags`, `generate_password`, `verify_vault`, `delete_label`).
 - `session.py`: keyring-backed session.
 - `storage.py`: JSON load/save/backup. Every load and save goes through `validate_storage.py`. Saves go through `write_json_atomically()` (temp file in the same dir, fsync, `os.replace`; the temp file is removed on failure), which also leaves the files `0600`.
 - `crypto.py`: PBKDF2 `derive_key` and `generate_salt`.
@@ -39,7 +39,7 @@ Key behaviors that span files:
 - **Data dir.** All data files live in `get_data_dir()`: `PM_DATA_DIR` if set, else `$XDG_DATA_HOME/password_manager` (only if absolute), else `~/.local/share/password_manager`. `ensure_data_dir()` creates it and forces `0700`; it runs when `logger.py` is imported, before `vault.log` is opened. `VAULT_FILE` / `USERS_FILE` still override the individual file paths.
 - **Two keys from one master password.** `derive_key(pw, auth_salt)` is stored in `users.json` as `"password"` and compared on login. `derive_key(pw + ":fernet", enc_salt)` is the Fernet key, which is never written to disk. It lives only in the OS keyring session (service `password_manager`, account `session`) along with the username and `last_activity`. The 15-minute TTL is checked in `load_session`.
 - **Vault shape:** `{username: {label: {"password": enc, "login": enc?, "tags": [plaintext]}}}`. The password and login are Fernet-encrypted per field. Tags are plaintext.
-- **Password overwrite versioning:** overwriting an existing password in `save_password` prompts for confirmation, moves the old password to `<label>__v<N>`, and calls `backup_vault()`, which writes `vault_backup_YYYYMMDD_HHMMSS.json` next to the vault. `is_versioned_backup()` recognizes these labels. Changes to the login or tags alone don't create a version or a backup.
+- **Password overwrite versioning:** overwriting an existing password in `save_password` prompts for confirmation, moves the old password to `<label>__v<N>`, and calls `backup_vault()`, which writes `vault_backup_YYYYMMDD_HHMMSS.json` next to the vault. `is_versioned_backup()` recognizes these labels. Changes to the login or tags alone don't create a version or a backup. `delete_label` also prompts and calls `backup_vault()` first, but removes only the exact label: its `__vN` versions are kept.
 - **Error convention:** storage functions return `None` on corrupt or invalid data and `{}` when the file is missing. Callers check for `None`. Most functions print user-facing messages and log through `logger` instead of raising. `authenticate_user` is the exception: it raises `ValueError`.
 
 ## Testing notes

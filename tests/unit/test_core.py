@@ -1,8 +1,8 @@
 import pytest
 import logging
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
-from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault
+from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
 
 
 @pytest.mark.unit
@@ -652,3 +652,82 @@ def test_verify_vault_reports_labels_whose_login_fails_to_decrypt(fernet, valid_
 def test_verify_vault_returns_none_when_vault_cannot_be_loaded(fernet):
     with patch("password_manager.core.load_vault", return_value=None):
         assert verify_vault("alice", fernet) is None
+
+
+@pytest.mark.unit
+def test_delete_label_removes_label_from_users_vault(valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "github")
+        assert mock_save.call_args.args[0]["alice"].keys() == {"twitter", "twitter__v1"}
+
+
+@pytest.mark.unit
+def test_delete_label_does_not_remove_the_labels_versions(valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "twitter")
+        assert mock_save.call_args.args[0]["alice"].keys() == {"github", "twitter__v1"}
+
+
+@pytest.mark.unit
+def test_delete_label_leaves_labels_that_only_share_a_prefix_untouched(valid_vault):
+    valid_vault["alice"]["github-work"] = valid_vault["alice"]["github"]
+    valid_vault["alice"]["githubv1"] = valid_vault["alice"]["github"]
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "github")
+        assert mock_save.call_args.args[0]["alice"].keys() == {"github-work", "githubv1", "twitter", "twitter__v1"}
+
+
+@pytest.mark.unit
+def test_delete_label_backs_up_vault_before_deleting(valid_vault):
+    calls = Mock()
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.backup_vault", calls.backup_vault), \
+         patch("password_manager.core.save_vault", calls.save_vault), \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "github")
+        assert calls.mock_calls == [call.backup_vault(), call.save_vault(ANY)]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("answer", ["n", "", "yes"])
+def test_delete_label_cancels_unless_user_confirms_with_y(valid_vault, capsys, answer):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input", return_value=answer):
+        delete_label("alice", "github")
+        mock_backup.assert_not_called()
+        mock_save.assert_not_called()
+        assert "Operation cancelled." in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_delete_label_reports_error_for_label_that_does_not_exist(valid_vault, capsys):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input") as mock_input:
+        delete_label("alice", "gitlab")
+        mock_input.assert_not_called()
+        mock_backup.assert_not_called()
+        mock_save.assert_not_called()
+        assert capsys.readouterr().out == "Password label 'gitlab' not found.\n"
+
+
+@pytest.mark.unit
+def test_delete_label_reports_error_when_vault_cannot_be_loaded(capsys):
+    with patch("password_manager.core.load_vault", return_value=None), \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input") as mock_input:
+        delete_label("alice", "github")
+        mock_input.assert_not_called()
+        mock_backup.assert_not_called()
+        mock_save.assert_not_called()
+        assert capsys.readouterr().out == "Failed to load password vault. The vault may be corrupted or unreadable.\n"

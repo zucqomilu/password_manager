@@ -2,7 +2,7 @@ import argparse
 import getpass
 from .logger import logger
 from .user import register_user, authenticate_user
-from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault
+from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label
 from .session import load_session, save_session, clear_session, refresh_session
 
 def main(argv=None):
@@ -44,6 +44,10 @@ def main(argv=None):
     remove_parser = subparsers.add_parser('remove',help='Remove tags from a password label')
     remove_parser.add_argument('label', help='Label to remove tags from')
     remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label')
+
+    # === DELETE ===
+    delete_parser = subparsers.add_parser('delete', help='Delete a password label (its versions are kept)')
+    delete_parser.add_argument('label', help='Label to delete')
 
     # === LIST ===
     list_parser = subparsers.add_parser('list', help='List all saved password labels')
@@ -105,6 +109,8 @@ def main(argv=None):
         get_password(username, args.label, fernet, show=args.show)
     elif args.command == 'remove':
         remove_tags(username, args.label, tags=args.tags)
+    elif args.command == 'delete':
+        delete_label(username, args.label)
     elif args.command == 'list':
         list_labels(username, fernet, tags=args.tags)
     elif args.command == 'verify':

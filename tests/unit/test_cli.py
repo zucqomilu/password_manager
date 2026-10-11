@@ -218,3 +218,12 @@ def test_verify_command_prints_error_when_vault_cannot_be_loaded(capsys):
          patch('password_manager.cli.verify_vault', return_value=None):
         run_cli_with_args(['prog', 'verify'])
         assert capsys.readouterr().out == "Failed to load password vault. The vault may be corrupted or unreadable.\n"
+
+
+@pytest.mark.unit
+def test_delete_command_calls_delete_label_for_given_label():
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.refresh_session'), \
+         patch('password_manager.cli.delete_label') as mock_delete_label:
+        run_cli_with_args(['prog', 'delete', 'github'])
+        mock_delete_label.assert_called_once_with('testuser', 'github')
