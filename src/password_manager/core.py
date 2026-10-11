@@ -212,6 +212,9 @@ def verify_vault(username, fernet):
 
 def delete_label(username, label):
     vault = load_vault()
+    if label not in vault.get(username, {}):
+        print(f"Password label '{label}' not found.")
+        return
     if input(f"Delete '{label}'? A backup is made first. (y/N): ").strip().lower() != 'y':
         print("Operation cancelled.")
         return

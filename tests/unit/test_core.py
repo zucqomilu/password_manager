@@ -705,3 +705,16 @@ def test_delete_label_cancels_unless_user_confirms_with_y(valid_vault, capsys, a
         mock_backup.assert_not_called()
         mock_save.assert_not_called()
         assert "Operation cancelled." in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_delete_label_reports_error_for_label_that_does_not_exist(valid_vault, capsys):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input") as mock_input:
+        delete_label("alice", "gitlab")
+        mock_input.assert_not_called()
+        mock_backup.assert_not_called()
+        mock_save.assert_not_called()
+        assert capsys.readouterr().out == "Password label 'gitlab' not found.\n"
