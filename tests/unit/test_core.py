@@ -692,3 +692,16 @@ def test_delete_label_backs_up_vault_before_deleting(valid_vault):
          patch("builtins.input", return_value="y"):
         delete_label("alice", "github")
         assert calls.mock_calls == [call.backup_vault(), call.save_vault(ANY)]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("answer", ["n", "", "yes"])
+def test_delete_label_cancels_unless_user_confirms_with_y(valid_vault, capsys, answer):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.backup_vault") as mock_backup, \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("builtins.input", return_value=answer):
+        delete_label("alice", "github")
+        mock_backup.assert_not_called()
+        mock_save.assert_not_called()
+        assert "Operation cancelled." in capsys.readouterr().out
