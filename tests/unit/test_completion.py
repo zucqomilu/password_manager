@@ -67,3 +67,9 @@ def test_label_arguments_complete_labels_from_vault_without_decrypting(command, 
         # A single match gets a trailing space, so the shell moves on to the next word
         assert complete(f"pm {command} g") == ["github "]
         mock_decrypt.assert_not_called()
+
+
+@pytest.mark.unit
+def test_label_completion_hides_versions(valid_vault):
+    with patch("password_manager.cli.load_vault", return_value=valid_vault):
+        assert complete("pm get t") == ["twitter "]
