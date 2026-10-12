@@ -122,7 +122,7 @@ def test_username_offers_no_completions(line):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("line", ["pm set github --tag ", "pm list --tag ", "pm remove github --tag "])
+@pytest.mark.parametrize("line", ["pm set github --tag ", "pm list --tag "])
 def test_tag_completes_tags_from_vault(line, valid_vault):
     valid_vault["alice"]["github"]["tags"] = ["work", "dev"]
     valid_vault["alice"]["twitter"]["tags"] = ["social", "work"]
@@ -136,3 +136,11 @@ def test_tag_completes_tags_from_vault(line, valid_vault):
 def test_tag_completion_offers_nothing_when_vault_cannot_be_loaded():
     with patch("password_manager.cli.load_vault", return_value=None):
         assert complete("pm list --tag ") == []
+
+
+@pytest.mark.unit
+def test_remove_tag_completes_only_that_labels_tags(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["work", "dev"]
+    valid_vault["alice"]["twitter"]["tags"] = ["social", "work"]
+    with patch("password_manager.cli.load_vault", return_value=valid_vault):
+        assert complete("pm remove github --tag ") == ["work", "dev"]

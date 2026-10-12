@@ -18,6 +18,10 @@ def complete_labels(**kwargs):
 def complete_tags(**kwargs):
     return list(dict.fromkeys(tag for entries in (load_vault() or {}).values() for entry in entries.values() for tag in entry.get("tags", [])))
 
+# Tab-completion for remove's --tag: only the tags of the label already typed on the command line
+def complete_label_tags(parsed_args, **kwargs):
+    return list(dict.fromkeys(tag for entries in (load_vault() or {}).values() for tag in entries.get(parsed_args.label, {}).get("tags", [])))
+
 # Tab-completion for arguments that must not suggest anything (new labels, passwords, logins, usernames), instead of file names
 def no_completions(**kwargs):
     return []
@@ -60,7 +64,7 @@ def build_parser():
     # === REMOVE ===
     remove_parser = subparsers.add_parser('remove',help='Remove tags from a password label')
     remove_parser.add_argument('label', help='Label to remove tags from').completer = complete_labels
-    remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label').completer = complete_tags
+    remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label').completer = complete_label_tags
 
     # === DELETE ===
     delete_parser = subparsers.add_parser('delete', help='Delete a password label (its versions are kept)')
