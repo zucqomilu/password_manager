@@ -13,7 +13,7 @@ from .storage import load_vault
 def complete_labels(**kwargs):
     return list(dict.fromkeys(label for entries in (load_vault() or {}).values() for label in entries if not is_versioned_backup(label)))
 
-# Tab-completion for arguments that must not suggest anything (new labels, passwords), instead of file names
+# Tab-completion for arguments that must not suggest anything (new labels, passwords, logins), instead of file names
 def no_completions(**kwargs):
     return []
 
@@ -38,13 +38,13 @@ def build_parser():
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
     gen_parser.add_argument('label', help='Label for the password').completer = no_completions
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
-    gen_parser.add_argument('--login', help='Optional login/email/username to associate with password')
+    gen_parser.add_argument('--login', help='Optional login/email/username to associate with password').completer = no_completions
 
     # === SET ===
     set_parser = subparsers.add_parser('set', help='Set password/login for a label')
     set_parser.add_argument('label', help='Label to set credentials for').completer = complete_labels
     set_parser.add_argument('--password', help='Password to set (optional)').completer = no_completions
-    set_parser.add_argument('--login', help='Login (email/username) to set (optional)')
+    set_parser.add_argument('--login', help='Login (email/username) to set (optional)').completer = no_completions
     set_parser.add_argument('--tag', action='append', dest='tags', help='Tag to add to the label')
 
     # === GET ===

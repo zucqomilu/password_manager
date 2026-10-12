@@ -104,3 +104,10 @@ def test_generate_still_completes_its_options_after_a_dash(line):
 def test_password_offers_no_completions(line, valid_vault):
     with patch("password_manager.cli.load_vault", return_value=valid_vault):
         assert complete(line) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("line", ["pm generate github --login ", "pm set github --login "])
+def test_login_offers_no_completions(line, valid_vault):
+    with patch("password_manager.cli.load_vault", return_value=valid_vault):
+        assert complete(line) == []
