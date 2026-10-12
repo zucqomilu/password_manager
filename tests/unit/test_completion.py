@@ -91,3 +91,9 @@ def test_completion_offers_options_only_after_a_dash_is_typed():
 def test_generate_label_argument_offers_no_completions(valid_vault):
     with patch("password_manager.cli.load_vault", return_value=valid_vault):
         assert complete("pm generate ") == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("line", ["pm generate -", "pm generate github -"])
+def test_generate_still_completes_its_options_after_a_dash(line):
+    assert complete(line) == ["-h", "--help", "--length", "--login"]
