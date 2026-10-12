@@ -24,7 +24,7 @@ def complete(line):
     output = io.StringIO()
     with completion_env(line):
         argcomplete.autocomplete(build_parser(), exit_method=lambda code: None, output_stream=output)
-    return output.getvalue().split("\n")
+    return output.getvalue().splitlines()
 
 
 @pytest.mark.unit
@@ -73,3 +73,9 @@ def test_label_arguments_complete_labels_from_vault_without_decrypting(command, 
 def test_label_completion_hides_versions(valid_vault):
     with patch("password_manager.cli.load_vault", return_value=valid_vault):
         assert complete("pm get t") == ["twitter "]
+
+
+@pytest.mark.unit
+def test_label_completion_offers_nothing_when_vault_cannot_be_loaded():
+    with patch("password_manager.cli.load_vault", return_value=None):
+        assert [word for word in complete("pm get ") if not word.startswith("-")] == []

@@ -8,9 +8,10 @@ from .session import load_session, save_session, clear_session, refresh_session
 from .storage import load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
-# so this never decrypts and never touches the keyring session or users.json
+# so this never decrypts and never touches the keyring session or users.json.
+# A damaged vault (None) offers nothing; that is safe because completion never saves.
 def complete_labels(**kwargs):
-    return list(dict.fromkeys(label for entries in load_vault().values() for label in entries if not is_versioned_backup(label)))
+    return list(dict.fromkeys(label for entries in (load_vault() or {}).values() for label in entries if not is_versioned_backup(label)))
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
