@@ -13,7 +13,7 @@ from .storage import load_vault
 def complete_labels(**kwargs):
     return list(dict.fromkeys(label for entries in (load_vault() or {}).values() for label in entries if not is_versioned_backup(label)))
 
-# Tab-completion for arguments that must not suggest anything (new labels, passwords, logins), instead of file names
+# Tab-completion for arguments that must not suggest anything (new labels, passwords, logins, usernames), instead of file names
 def no_completions(**kwargs):
     return []
 
@@ -23,12 +23,12 @@ def build_parser():
 
     # === REGISTER ===
     register_parser = subparsers.add_parser('register', help='Register a new user')
-    register_parser.add_argument('--username', help='Username for registration')
+    register_parser.add_argument('--username', help='Username for registration').completer = no_completions
     register_parser.add_argument('--password', help='Master password (optional for scripting)').completer = no_completions
 
     # === LOGIN ===
     login_parser = subparsers.add_parser('login', help='Login as an existing user')
-    login_parser.add_argument('--username', help='Username for login')
+    login_parser.add_argument('--username', help='Username for login').completer = no_completions
     login_parser.add_argument('--password', help='Master password (optional for scripting)').completer = no_completions
 
     # === LOGOUT ===

@@ -111,3 +111,11 @@ def test_password_offers_no_completions(line, valid_vault):
 def test_login_offers_no_completions(line, valid_vault):
     with patch("password_manager.cli.load_vault", return_value=valid_vault):
         assert complete(line) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("line", ["pm register --username ", "pm login --username "])
+def test_username_offers_no_completions(line):
+    with patch("password_manager.user.load_users") as mock_load_users:
+        assert complete(line) == []
+        mock_load_users.assert_not_called()
