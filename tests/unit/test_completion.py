@@ -97,3 +97,10 @@ def test_generate_label_argument_offers_no_completions(valid_vault):
 @pytest.mark.parametrize("line", ["pm generate -", "pm generate github -"])
 def test_generate_still_completes_its_options_after_a_dash(line):
     assert complete(line) == ["-h", "--help", "--length", "--login"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("line", ["pm register --password ", "pm login --password ", "pm set github --password "])
+def test_password_offers_no_completions(line, valid_vault):
+    with patch("password_manager.cli.load_vault", return_value=valid_vault):
+        assert complete(line) == []
