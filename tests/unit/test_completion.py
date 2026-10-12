@@ -130,3 +130,9 @@ def test_tag_completes_tags_from_vault(line, valid_vault):
          patch("cryptography.fernet.Fernet.decrypt") as mock_decrypt:
         assert complete(line) == ["work", "dev", "social"]
         mock_decrypt.assert_not_called()
+
+
+@pytest.mark.unit
+def test_tag_completion_offers_nothing_when_vault_cannot_be_loaded():
+    with patch("password_manager.cli.load_vault", return_value=None):
+        assert complete("pm list --tag ") == []

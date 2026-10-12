@@ -13,9 +13,10 @@ from .storage import load_vault
 def complete_labels(**kwargs):
     return list(dict.fromkeys(label for entries in (load_vault() or {}).values() for label in entries if not is_versioned_backup(label)))
 
-# Tab-completion for --tag: tags are plain text in vault.json, so this never decrypts either
+# Tab-completion for --tag: tags are plain text in vault.json, so this never decrypts either.
+# A damaged vault (None) offers nothing; that is safe because completion never saves.
 def complete_tags(**kwargs):
-    return list(dict.fromkeys(tag for entries in load_vault().values() for entry in entries.values() for tag in entry.get("tags", [])))
+    return list(dict.fromkeys(tag for entries in (load_vault() or {}).values() for entry in entries.values() for tag in entry.get("tags", [])))
 
 # Tab-completion for arguments that must not suggest anything (new labels, passwords, logins, usernames), instead of file names
 def no_completions(**kwargs):
