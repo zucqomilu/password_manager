@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 source .venv/bin/activate
 pip install -e ".[dev]"                  # editable install from pyproject.toml
 
-python main.py <command> [args]          # register | login | logout | generate | set | get | remove | delete | list | verify
+python main.py <command> [args]          # register | login | logout | generate | set | get | remove | delete | list | verify | completion
 
 pytest -m unit                           # day-to-day loop
 pytest -m "unit or integration"          # before merging a feature branch
@@ -24,7 +24,7 @@ There is no linter or build step configured.
 
 `main.py` → `src/password_manager/cli.py:main(argv)`: one argparse dispatcher. Its control flow matters:
 - `register` returns early. `login` (also used when no command is given) authenticates and saves a session, then **falls through** to the session-loading code.
-- `logout` clears the session and returns.
+- `logout` clears the session and returns. `completion` prints the bash script from `argcomplete.shellcode(["pm"], use_defaults=False)` and returns; `use_defaults=False` drops bash's `-o default` file-name fallback.
 - Every other command calls `load_session()`, then `refresh_session()`, then dispatches to a function in `core.py`.
 
 Module layers (dependencies point downward):
@@ -51,7 +51,7 @@ Key behaviors that span files:
 - `test_clock` freezes `password_manager.session.time.time` for testing TTL expiry. `mock_session_keyring` reads and writes the raw session entry.
 - `pytest_configure` in `tests/conftest.py` points `PM_DATA_DIR` at a throwaway temp dir before any test module imports the package, so no test run can touch the real data dir or a copy exported in the shell. `src/password_manager/logger.py` is excluded from coverage in `pyproject.toml`.
 - To run `pm` by hand against a copy of real data, point `PM_DATA_DIR` at the copy. Never run feature-branch code against the real data dir.
-- `tests/unit/test_completion.py`'s `complete(line)` presses Tab through the real `main()` in-process. It sets the shell's completion env vars and makes argcomplete's `os.fdopen(9)` debug stream fail (fd 9 belongs to pytest). `load_session()` swallows every exception, so assert completion isolation with `assert_not_called()`, not with mocks that raise.
+- `tests/unit/test_completion.py`'s `complete(line)` presses Tab through the real `main()` in-process. It sets the shell's completion env vars and makes argcomplete's `os.fdopen(9)` debug stream fail (fd 9 belongs to pytest). `load_session()` swallows every exception, so assert completion isolation with `assert_not_called()`, not with mocks that raise. `tests/integration/test_completion.py` also presses Tab in a real interactive bash through a pty, because shell-level behavior such as file-name fallback is invisible to in-process tests.
 - E2E tests drive `password_manager.cli.main([...])` with `--username`/`--password` flags and assert on `capsys` output.
 
 ## Scope of convention changes

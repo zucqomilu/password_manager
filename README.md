@@ -274,14 +274,16 @@ This installs the `pm` command into the virtual environment.
 
 ### Shell completion
 
-`pm` supports tab-completion through `argcomplete`. To enable it in bash, generate the completion script once with `register-python-argcomplete` (from the `argcomplete` package; on Arch it is also provided by `python-argcomplete`):
+`pm` supports tab-completion in bash through `argcomplete`. `pm` prints its own completion script, so set it up once with:
 
 ```bash
 mkdir -p ~/.local/share/bash-completion/completions
-register-python-argcomplete pm > ~/.local/share/bash-completion/completions/pm
+pm completion > ~/.local/share/bash-completion/completions/pm
 ```
 
-Open a new shell afterwards. For zsh, add `eval "$(register-python-argcomplete pm)"` to `~/.zshrc` after `autoload -U compinit && compinit`.
+Open a new shell afterwards. Re-run the command after upgrading `pm` if completion behaves differently.
+
+Use `pm completion` rather than `register-python-argcomplete pm`: the generic script registers `pm` with bash's `-o default`, which makes bash fall back to **file names** wherever `pm` deliberately offers nothing, such as after `--password`.
 
 What completes:
 
@@ -309,6 +311,7 @@ remove
 delete
 list
 verify
+completion
 ```
 
 ### Register a user
@@ -715,7 +718,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
 
-The current test suite contains **256 tests**.
+The current test suite contains **258 tests**.
 
 Coverage can be generated with:
 
@@ -726,8 +729,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-542 statements
-542 statements covered
+546 statements
+546 statements covered
 100% coverage
 ```
 
