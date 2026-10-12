@@ -13,6 +13,10 @@ from .storage import load_vault
 def complete_labels(**kwargs):
     return list(dict.fromkeys(label for entries in (load_vault() or {}).values() for label in entries if not is_versioned_backup(label)))
 
+# Tab-completion for arguments that must not suggest anything (new labels), instead of file names
+def no_completions(**kwargs):
+    return []
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
@@ -32,7 +36,7 @@ def build_parser():
 
     # === GENERATE ===
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
-    gen_parser.add_argument('label', help='Label for the password')
+    gen_parser.add_argument('label', help='Label for the password').completer = no_completions
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
     gen_parser.add_argument('--login', help='Optional login/email/username to associate with password')
 

@@ -85,3 +85,9 @@ def test_label_completion_offers_nothing_when_vault_cannot_be_loaded():
 def test_completion_offers_options_only_after_a_dash_is_typed():
     assert complete("pm ") == ["register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify"]
     assert complete("pm -") == ["-h", "--help"]
+
+
+@pytest.mark.unit
+def test_generate_label_argument_offers_no_completions(valid_vault):
+    with patch("password_manager.cli.load_vault", return_value=valid_vault):
+        assert complete("pm generate ") == []
