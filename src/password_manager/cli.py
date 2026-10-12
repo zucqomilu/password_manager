@@ -77,6 +77,9 @@ def build_parser():
     # === VERIFY ===
     subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')
 
+    # === COMPLETION ===
+    subparsers.add_parser('completion', help='Print the bash completion script')
+
     return parser
 
 def main(argv=None):
@@ -107,6 +110,13 @@ def main(argv=None):
     # === LOGOUT USER ===
     if args.command == "logout":
         clear_session()
+        return
+
+    # === PRINT COMPLETION SCRIPT ===
+    # use_defaults=False drops bash's "-o default", which would fall back to file names
+    # wherever pm deliberately offers nothing (passwords, logins, new labels)
+    if args.command == "completion":
+        print(argcomplete.shellcode(["pm"], use_defaults=False))
         return
 
     # === LOAD SESSION ===
