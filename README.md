@@ -18,6 +18,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * Automatic vault backups when overwriting passwords
 * Atomic saves: a crash or full disk never leaves a half-written vault or users file
 * `pm verify` checks that every stored password and login still decrypts
+* Shell tab-completion for commands, options, labels and tags (via `argcomplete`), without decrypting anything
 * Session persistence through the operating system's keyring
 * 15-minute session expiration
 * Automatic session activity refresh
@@ -231,6 +232,7 @@ The log contains operational information useful for debugging and auditing appli
 * `cryptography`
 * `pyperclip`
 * `keyring`
+* `argcomplete`
 
 Dependencies are declared in `pyproject.toml`. Current versions:
 
@@ -238,6 +240,7 @@ Dependencies are declared in `pyproject.toml`. Current versions:
 cryptography==46.0.3
 pyperclip==1.11.0
 keyring==25.7.0
+argcomplete==3.7.2
 ```
 
 ## Installation
@@ -269,6 +272,28 @@ pip install -e ".[dev]"
 
 This installs the `pm` command into the virtual environment.
 
+### Shell completion
+
+`pm` supports tab-completion in bash through `argcomplete`. `pm` prints its own completion script, so set it up once with:
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+pm completion > ~/.local/share/bash-completion/completions/pm
+```
+
+Open a new shell afterwards. Re-run the command after upgrading `pm` if completion behaves differently.
+
+Use `pm completion` rather than `register-python-argcomplete pm`: the generic script registers `pm` with bash's `-o default`, which makes bash fall back to **file names** wherever `pm` deliberately offers nothing, such as after `--password`.
+
+What completes:
+
+* Subcommands after `pm `, and options only once a `-` is typed.
+* Labels for `get`, `set`, `remove` and `delete`, without `__vN` versions.
+* Tags for `--tag`; for `remove`, only the tags of the label already typed.
+* Nothing for `generate`'s new label, `--password`, `--login` or `--username`, so a file name can never slip into a password.
+
+Labels and tags are read from `vault.json`, where they are stored in plain text. Completion never decrypts anything and never reads the keyring session or `users.json`, so it also works (and shows labels) when you are logged out. A damaged vault simply offers no suggestions.
+
 ## Usage
 
 The application is started with the `pm` command. `python main.py` still works and runs the same CLI.
@@ -286,6 +311,7 @@ remove
 delete
 list
 verify
+completion
 ```
 
 ### Register a user
@@ -692,7 +718,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
 
-The current test suite contains **226 tests**.
+The current test suite contains **258 tests**.
 
 Coverage can be generated with:
 
@@ -703,8 +729,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-528 statements
-528 statements covered
+546 statements
+546 statements covered
 100% coverage
 ```
 

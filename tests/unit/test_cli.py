@@ -1,6 +1,8 @@
+import argparse
 import pytest
+import re
 import sys
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 from password_manager import cli
 
 
@@ -227,3 +229,31 @@ def test_delete_command_calls_delete_label_for_given_label():
          patch('password_manager.cli.delete_label') as mock_delete_label:
         run_cli_with_args(['prog', 'delete', 'github'])
         mock_delete_label.assert_called_once_with('testuser', 'github')
+
+
+@pytest.mark.unit
+def test_build_parser_returns_parser_with_every_subcommand():
+    assert re.search(r"\{(.+?)\}", cli.build_parser().format_help()).group(1).split(",") == [
+        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "completion",
+    ]
+
+
+@pytest.mark.unit
+def test_main_calls_argcomplete_autocomplete_before_parse_args():
+    calls = Mock()
+    calls.parser.parse_args.return_value = argparse.Namespace(command='logout')
+    with patch('password_manager.cli.build_parser', return_value=calls.parser), \
+         patch('password_manager.cli.argcomplete', calls.argcomplete), \
+         patch('password_manager.cli.clear_session'):
+        cli.main(['logout'])
+        assert calls.mock_calls[:2] == [call.argcomplete.autocomplete(calls.parser, always_complete_options=False), call.parser.parse_args(['logout'])]
+
+
+@pytest.mark.unit
+def test_completion_command_prints_bash_script_that_never_falls_back_to_file_names(capsys):
+    with patch('password_manager.cli.load_session') as mock_load_session:
+        run_cli_with_args(['prog', 'completion'])
+        script = capsys.readouterr().out
+        assert "complete -o nospace -o bashdefault -F _python_argcomplete pm" in script
+        assert "-o default" not in script
+        mock_load_session.assert_not_called()

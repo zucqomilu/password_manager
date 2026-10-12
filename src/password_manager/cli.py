@@ -1,61 +1,90 @@
 import argparse
 import getpass
+import argcomplete
 from .logger import logger
 from .user import register_user, authenticate_user
-from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label
+from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import load_session, save_session, clear_session, refresh_session
+from .storage import load_vault
 
-def main(argv=None):
+# Tab-completion for label arguments: label names are plain text in vault.json,
+# so this never decrypts and never touches the keyring session or users.json.
+# A damaged vault (None) offers nothing; that is safe because completion never saves.
+def complete_labels(**kwargs):
+    return list(dict.fromkeys(label for entries in (load_vault() or {}).values() for label in entries if not is_versioned_backup(label)))
+
+# Tab-completion for --tag: tags are plain text in vault.json, so this never decrypts either.
+# A damaged vault (None) offers nothing; that is safe because completion never saves.
+def complete_tags(**kwargs):
+    return list(dict.fromkeys(tag for entries in (load_vault() or {}).values() for entry in entries.values() for tag in entry.get("tags", [])))
+
+# Tab-completion for remove's --tag: only the tags of the label already typed on the command line
+def complete_label_tags(parsed_args, **kwargs):
+    return list(dict.fromkeys(tag for entries in (load_vault() or {}).values() for tag in entries.get(parsed_args.label, {}).get("tags", [])))
+
+# Tab-completion for arguments that must not suggest anything (new labels, passwords, logins, usernames), instead of file names
+def no_completions(**kwargs):
+    return []
+
+def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
     subparsers = parser.add_subparsers(dest='command')
 
     # === REGISTER ===
     register_parser = subparsers.add_parser('register', help='Register a new user')
-    register_parser.add_argument('--username', help='Username for registration')
-    register_parser.add_argument('--password', help='Master password (optional for scripting)')
+    register_parser.add_argument('--username', help='Username for registration').completer = no_completions
+    register_parser.add_argument('--password', help='Master password (optional for scripting)').completer = no_completions
 
     # === LOGIN ===
     login_parser = subparsers.add_parser('login', help='Login as an existing user')
-    login_parser.add_argument('--username', help='Username for login')
-    login_parser.add_argument('--password', help='Master password (optional for scripting)')
+    login_parser.add_argument('--username', help='Username for login').completer = no_completions
+    login_parser.add_argument('--password', help='Master password (optional for scripting)').completer = no_completions
 
     # === LOGOUT ===
     subparsers.add_parser('logout', help='Log out and clear session')
 
     # === GENERATE ===
     gen_parser = subparsers.add_parser('generate', help='Generate and store a password')
-    gen_parser.add_argument('label', help='Label for the password')
+    gen_parser.add_argument('label', help='Label for the password').completer = no_completions
     gen_parser.add_argument('--length', type=int, default=16, help='Password length')
-    gen_parser.add_argument('--login', help='Optional login/email/username to associate with password')
+    gen_parser.add_argument('--login', help='Optional login/email/username to associate with password').completer = no_completions
 
     # === SET ===
     set_parser = subparsers.add_parser('set', help='Set password/login for a label')
-    set_parser.add_argument('label', help='Label to set credentials for')
-    set_parser.add_argument('--password', help='Password to set (optional)')
-    set_parser.add_argument('--login', help='Login (email/username) to set (optional)')
-    set_parser.add_argument('--tag', action='append', dest='tags', help='Tag to add to the label')
+    set_parser.add_argument('label', help='Label to set credentials for').completer = complete_labels
+    set_parser.add_argument('--password', help='Password to set (optional)').completer = no_completions
+    set_parser.add_argument('--login', help='Login (email/username) to set (optional)').completer = no_completions
+    set_parser.add_argument('--tag', action='append', dest='tags', help='Tag to add to the label').completer = complete_tags
 
     # === GET ===
     get_parser = subparsers.add_parser('get', help='Get a password by label')
-    get_parser.add_argument('label')
+    get_parser.add_argument('label').completer = complete_labels
     get_parser.add_argument('--show', action='store_true', help='Show password in terminal')
 
     # === REMOVE ===
     remove_parser = subparsers.add_parser('remove',help='Remove tags from a password label')
-    remove_parser.add_argument('label', help='Label to remove tags from')
-    remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label')
+    remove_parser.add_argument('label', help='Label to remove tags from').completer = complete_labels
+    remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label').completer = complete_label_tags
 
     # === DELETE ===
     delete_parser = subparsers.add_parser('delete', help='Delete a password label (its versions are kept)')
-    delete_parser.add_argument('label', help='Label to delete')
+    delete_parser.add_argument('label', help='Label to delete').completer = complete_labels
 
     # === LIST ===
     list_parser = subparsers.add_parser('list', help='List all saved password labels')
-    list_parser.add_argument('--tag', nargs='+', dest='tags', help='Only list labels with these tags')
+    list_parser.add_argument('--tag', nargs='+', dest='tags', help='Only list labels with these tags').completer = complete_tags
 
     # === VERIFY ===
     subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')
 
+    # === COMPLETION ===
+    subparsers.add_parser('completion', help='Print the bash completion script')
+
+    return parser
+
+def main(argv=None):
+    parser = build_parser()
+    argcomplete.autocomplete(parser, always_complete_options=False)
     args = parser.parse_args(argv)
 
     # === REGISTER USER ===
@@ -81,6 +110,13 @@ def main(argv=None):
     # === LOGOUT USER ===
     if args.command == "logout":
         clear_session()
+        return
+
+    # === PRINT COMPLETION SCRIPT ===
+    # use_defaults=False drops bash's "-o default", which would fall back to file names
+    # wherever pm deliberately offers nothing (passwords, logins, new labels)
+    if args.command == "completion":
+        print(argcomplete.shellcode(["pm"], use_defaults=False))
         return
 
     # === LOAD SESSION ===
