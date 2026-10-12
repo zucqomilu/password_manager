@@ -246,4 +246,4 @@ def test_main_calls_argcomplete_autocomplete_before_parse_args():
          patch('password_manager.cli.argcomplete', calls.argcomplete), \
          patch('password_manager.cli.clear_session'):
         cli.main(['logout'])
-        assert calls.mock_calls[:2] == [call.argcomplete.autocomplete(calls.parser), call.parser.parse_args(['logout'])]
+        assert calls.mock_calls[:2] == [call.argcomplete.autocomplete(calls.parser, always_complete_options=False), call.parser.parse_args(['logout'])]

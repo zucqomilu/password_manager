@@ -68,7 +68,7 @@ def build_parser():
 
 def main(argv=None):
     parser = build_parser()
-    argcomplete.autocomplete(parser)
+    argcomplete.autocomplete(parser, always_complete_options=False)
     args = parser.parse_args(argv)
 
     # === REGISTER USER ===
