@@ -5,6 +5,12 @@ from .logger import logger
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label
 from .session import load_session, save_session, clear_session, refresh_session
+from .storage import load_vault
+
+# Tab-completion for label arguments: label names are plain text in vault.json,
+# so this never decrypts and never touches the keyring session or users.json
+def complete_labels(**kwargs):
+    return list(dict.fromkeys(label for entries in load_vault().values() for label in entries))
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
@@ -31,24 +37,24 @@ def build_parser():
 
     # === SET ===
     set_parser = subparsers.add_parser('set', help='Set password/login for a label')
-    set_parser.add_argument('label', help='Label to set credentials for')
+    set_parser.add_argument('label', help='Label to set credentials for').completer = complete_labels
     set_parser.add_argument('--password', help='Password to set (optional)')
     set_parser.add_argument('--login', help='Login (email/username) to set (optional)')
     set_parser.add_argument('--tag', action='append', dest='tags', help='Tag to add to the label')
 
     # === GET ===
     get_parser = subparsers.add_parser('get', help='Get a password by label')
-    get_parser.add_argument('label')
+    get_parser.add_argument('label').completer = complete_labels
     get_parser.add_argument('--show', action='store_true', help='Show password in terminal')
 
     # === REMOVE ===
     remove_parser = subparsers.add_parser('remove',help='Remove tags from a password label')
-    remove_parser.add_argument('label', help='Label to remove tags from')
+    remove_parser.add_argument('label', help='Label to remove tags from').completer = complete_labels
     remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label')
 
     # === DELETE ===
     delete_parser = subparsers.add_parser('delete', help='Delete a password label (its versions are kept)')
-    delete_parser.add_argument('label', help='Label to delete')
+    delete_parser.add_argument('label', help='Label to delete').completer = complete_labels
 
     # === LIST ===
     list_parser = subparsers.add_parser('list', help='List all saved password labels')

@@ -45,17 +45,25 @@ def exit_completion(code):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("line", ["pm ", "pm get ", "pm set github --", "pm delete "])
-def test_completion_never_loads_vault_users_or_session(line):
+def test_completion_never_loads_users_file_or_session(line):
     real_autocomplete = argcomplete.autocomplete
     with completion_env(line), \
          patch("password_manager.cli.argcomplete.autocomplete",
                lambda parser: real_autocomplete(parser, exit_method=exit_completion, output_stream=io.StringIO())), \
-         patch("password_manager.core.load_vault") as mock_load_vault, \
          patch("password_manager.user.load_users") as mock_load_users, \
          patch("password_manager.session.keyring.get_password") as mock_get_session, \
          pytest.raises(SystemExit) as completion_exit:
         main([])
     assert completion_exit.value.code == 0
-    mock_load_vault.assert_not_called()
     mock_load_users.assert_not_called()
     mock_get_session.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("command", ["get", "set", "remove", "delete"])
+def test_label_arguments_complete_labels_from_vault_without_decrypting(command, valid_vault):
+    with patch("password_manager.cli.load_vault", return_value=valid_vault), \
+         patch("cryptography.fernet.Fernet.decrypt") as mock_decrypt:
+        # A single match gets a trailing space, so the shell moves on to the next word
+        assert complete(f"pm {command} g") == ["github "]
+        mock_decrypt.assert_not_called()
