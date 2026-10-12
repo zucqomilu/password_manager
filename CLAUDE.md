@@ -28,7 +28,7 @@ There is no linter or build step configured.
 - Every other command calls `load_session()`, then `refresh_session()`, then dispatches to a function in `core.py`.
 
 Module layers (dependencies point downward):
-- `cli.py`: arg parsing and I/O prompts.
+- `cli.py`: arg parsing (`build_parser()`) and I/O prompts. `main()` calls `argcomplete.autocomplete()` right after `build_parser()`, before any login, session or vault code; during Tab-completion it prints suggestions and exits there. Label and tag completers read plain-text names from `load_vault()` only (never decrypt, never touch the keyring or `users.json`); `no_completions` stops file-name suggestions for new labels, passwords, logins and usernames.
 - `user.py` (register/authenticate) and `core.py` (vault operations: `save_password`, `get_password`, `list_labels`, `remove_tags`, `generate_password`, `verify_vault`, `delete_label`).
 - `session.py`: keyring-backed session.
 - `storage.py`: JSON load/save/backup. Every load and save goes through `validate_storage.py`. Saves go through `write_json_atomically()` (temp file in the same dir, fsync, `os.replace`; the temp file is removed on failure), which also leaves the files `0600`.
@@ -51,6 +51,7 @@ Key behaviors that span files:
 - `test_clock` freezes `password_manager.session.time.time` for testing TTL expiry. `mock_session_keyring` reads and writes the raw session entry.
 - `pytest_configure` in `tests/conftest.py` points `PM_DATA_DIR` at a throwaway temp dir before any test module imports the package, so no test run can touch the real data dir or a copy exported in the shell. `src/password_manager/logger.py` is excluded from coverage in `pyproject.toml`.
 - To run `pm` by hand against a copy of real data, point `PM_DATA_DIR` at the copy. Never run feature-branch code against the real data dir.
+- `tests/unit/test_completion.py`'s `complete(line)` presses Tab through the real `main()` in-process. It sets the shell's completion env vars and makes argcomplete's `os.fdopen(9)` debug stream fail (fd 9 belongs to pytest). `load_session()` swallows every exception, so assert completion isolation with `assert_not_called()`, not with mocks that raise.
 - E2E tests drive `password_manager.cli.main([...])` with `--username`/`--password` flags and assert on `capsys` output.
 
 ## Scope of convention changes
