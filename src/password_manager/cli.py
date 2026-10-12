@@ -13,6 +13,10 @@ from .storage import load_vault
 def complete_labels(**kwargs):
     return list(dict.fromkeys(label for entries in (load_vault() or {}).values() for label in entries if not is_versioned_backup(label)))
 
+# Tab-completion for --tag: tags are plain text in vault.json, so this never decrypts either
+def complete_tags(**kwargs):
+    return list(dict.fromkeys(tag for entries in load_vault().values() for entry in entries.values() for tag in entry.get("tags", [])))
+
 # Tab-completion for arguments that must not suggest anything (new labels, passwords, logins, usernames), instead of file names
 def no_completions(**kwargs):
     return []
@@ -45,7 +49,7 @@ def build_parser():
     set_parser.add_argument('label', help='Label to set credentials for').completer = complete_labels
     set_parser.add_argument('--password', help='Password to set (optional)').completer = no_completions
     set_parser.add_argument('--login', help='Login (email/username) to set (optional)').completer = no_completions
-    set_parser.add_argument('--tag', action='append', dest='tags', help='Tag to add to the label')
+    set_parser.add_argument('--tag', action='append', dest='tags', help='Tag to add to the label').completer = complete_tags
 
     # === GET ===
     get_parser = subparsers.add_parser('get', help='Get a password by label')
@@ -55,7 +59,7 @@ def build_parser():
     # === REMOVE ===
     remove_parser = subparsers.add_parser('remove',help='Remove tags from a password label')
     remove_parser.add_argument('label', help='Label to remove tags from').completer = complete_labels
-    remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label')
+    remove_parser.add_argument('--tag', nargs='+', dest='tags', required=True, help='Tags to remove from the label').completer = complete_tags
 
     # === DELETE ===
     delete_parser = subparsers.add_parser('delete', help='Delete a password label (its versions are kept)')
@@ -63,7 +67,7 @@ def build_parser():
 
     # === LIST ===
     list_parser = subparsers.add_parser('list', help='List all saved password labels')
-    list_parser.add_argument('--tag', nargs='+', dest='tags', help='Only list labels with these tags')
+    list_parser.add_argument('--tag', nargs='+', dest='tags', help='Only list labels with these tags').completer = complete_tags
 
     # === VERIFY ===
     subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')

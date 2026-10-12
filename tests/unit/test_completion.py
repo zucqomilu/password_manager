@@ -119,3 +119,14 @@ def test_username_offers_no_completions(line):
     with patch("password_manager.user.load_users") as mock_load_users:
         assert complete(line) == []
         mock_load_users.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("line", ["pm set github --tag ", "pm list --tag ", "pm remove github --tag "])
+def test_tag_completes_tags_from_vault(line, valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["work", "dev"]
+    valid_vault["alice"]["twitter"]["tags"] = ["social", "work"]
+    with patch("password_manager.cli.load_vault", return_value=valid_vault), \
+         patch("cryptography.fernet.Fernet.decrypt") as mock_decrypt:
+        assert complete(line) == ["work", "dev", "social"]
+        mock_decrypt.assert_not_called()
