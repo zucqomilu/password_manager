@@ -1,6 +1,7 @@
 import pytest
 from password_manager.user import register_user, authenticate_user
 from unittest.mock import patch
+from cryptography.fernet import Fernet
 
 @pytest.mark.unit
 def test_register_user_success():
@@ -23,6 +24,12 @@ def test_authenticate_user_success(make_user):
         key = authenticate_user("alice", "alice_wonderland")
         assert isinstance(key, bytes)
         assert len(key) == 44  # base64 encoded Fernet key
+
+@pytest.mark.unit
+def test_authenticate_user_returns_the_data_key_for_a_v2_user(make_v2_user):
+    data_key = Fernet.generate_key()
+    with patch("password_manager.user.load_users", return_value=make_v2_user(data_key=data_key)):
+        assert authenticate_user("alice", "alice_wonderland") == data_key
 
 @pytest.mark.unit
 def test_authenticate_user_incorrect_password(valid_user):

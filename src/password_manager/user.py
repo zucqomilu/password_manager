@@ -1,5 +1,5 @@
 import base64
-from .crypto import derive_key, generate_salt
+from .crypto import derive_key, generate_salt, unwrap_data_key
 from .storage import save_users, load_users
 from .logger import logger
 
@@ -42,6 +42,13 @@ def authenticate_user(username: str, password: str) -> bytes:
         raise ValueError("User does not exist.")
 
     user_data = users[username]
+
+    # v2: the password unwraps the stored data key (Argon2id + AES-GCM); v1 records fall through unchanged
+    if user_data.get("version") == 2:
+        data_key = unwrap_data_key(user_data["wrapped_key"], password, user_data["kdf"])
+        logger.info(f"User '{username}' authenticated successfully.")
+        return data_key
+
     auth_salt = base64.b64decode(user_data["auth_salt"])
     enc_salt = base64.b64decode(user_data["enc_salt"])
     
