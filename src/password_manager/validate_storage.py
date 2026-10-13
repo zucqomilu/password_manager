@@ -5,6 +5,8 @@ REQUIRED_USER_KEYS = {"auth_salt", "enc_salt", "password"}
 
 REQUIRED_V2_USER_KEYS = {"version", "kdf", "wrapped_key"}
 
+KDF_PARAMS = {"salt", "time_cost", "memory_cost", "parallelism"}
+
 # nonce (12) + AES-GCM encrypted Fernet key (44) + GCM tag (16)
 WRAPPED_KEY_LENGTH = 72
 
@@ -35,10 +37,27 @@ def is_strict_base64(value, expected_decoded_len):
     except ValueError:
         return False
 
+# bool is an int subclass, so exclude it explicitly
+def is_positive_int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+# Names of Argon2id parameters that are missing, unexpected, or invalid (16-byte salt, positive int costs)
+def invalid_kdf_params(kdf):
+    return sorted((kdf.keys() ^ KDF_PARAMS) | {
+        name for name in kdf.keys() & KDF_PARAMS
+        if not (is_strict_base64(kdf[name], 16) if name == "salt" else is_positive_int(kdf[name]))
+    })
+
 # A v2 record holds Argon2id parameters and the data key wrapped under the master password
 def validate_v2_user(username, record) -> bool:
     if set(record.keys()) != REQUIRED_V2_USER_KEYS:
         logger.error(f"User '{username}' v2 record must have exactly the fields: {', '.join(sorted(REQUIRED_V2_USER_KEYS))}.")
+        return False
+    if not isinstance(record["kdf"], dict):
+        logger.error(f"User '{username}' field 'kdf' must be a dict.")
+        return False
+    if invalid_kdf_params(record["kdf"]):
+        logger.error(f"User '{username}' field 'kdf' is missing or invalid: {', '.join(invalid_kdf_params(record['kdf']))}.")
         return False
     if not is_strict_base64(record["wrapped_key"], WRAPPED_KEY_LENGTH):
         logger.error(f"User '{username}' field 'wrapped_key' has invalid base64 format.")

@@ -80,6 +80,17 @@ def test_validate_users_still_accepts_v1_records(make_user, make_v2_user):
     assert validate_users({**make_user(username="alice"), **make_v2_user(username="bob")}) is True
 
 
+# --- v2 record missing one of its Argon2id parameters ---
+@pytest.mark.unit
+@pytest.mark.parametrize("param", ["salt", "time_cost", "memory_cost", "parallelism"])
+def test_validate_users_rejects_v2_record_missing_kdf_param(caplog, make_v2_user, param):
+    users = make_v2_user()
+    del users["alice"]["kdf"][param]
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert f"User 'alice' field 'kdf' is missing or invalid: {param}." in caplog.text
+
+
 # --- Multiple users, one invalid ---
 @pytest.mark.unit
 def test_validate_users_one_user_invalid(caplog, valid_users):
