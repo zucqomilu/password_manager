@@ -3,6 +3,8 @@ import pytest
 from password_manager.user import register_user, authenticate_user
 from unittest.mock import patch
 from cryptography.fernet import Fernet
+from password_manager.crypto import unwrap_data_key
+from password_manager.validate_storage import validate_users
 
 @pytest.mark.unit
 def test_register_user_success():
@@ -11,6 +13,20 @@ def test_register_user_success():
         result = register_user("newuser", "newpassword")
         assert result is True
         mock_save.assert_called_once()
+
+@pytest.mark.unit
+def test_register_user_creates_a_v2_record_with_argon2id_params_and_a_wrapped_random_data_key():
+    with patch("password_manager.user.load_users", return_value={}), \
+         patch("password_manager.user.save_users") as mock_save:
+        assert register_user("alice", "same_password") and register_user("bob", "same_password")
+    alice, bob = mock_save.call_args_list[0].args[0]["alice"], mock_save.call_args_list[1].args[0]["bob"]
+    assert validate_users({"alice": alice, "bob": bob}) is True
+    assert (alice["version"], {k: v for k, v in alice["kdf"].items() if k != "salt"}) == (
+        2, {"time_cost": 3, "memory_cost": 65536, "parallelism": 4},
+    )
+    data_keys = [unwrap_data_key(record["wrapped_key"], "same_password", record["kdf"]) for record in (alice, bob)]
+    assert all(Fernet(key) for key in data_keys)
+    assert data_keys[0] != data_keys[1]  # random, not derived from the password
 
 @pytest.mark.unit
 def test_register_user_user_exists():

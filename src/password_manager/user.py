@@ -1,5 +1,7 @@
 import base64
-from .crypto import derive_key, generate_salt, unwrap_data_key
+from cryptography.fernet import Fernet
+from .crypto import derive_key, generate_salt, unwrap_data_key, wrap_data_key
+from .constants import ARGON2_PARAMS
 from .storage import save_users, load_users
 from .logger import logger
 
@@ -16,17 +18,9 @@ def register_user(username: str, master_password: str) -> bool:
         logger.warning(f"User '{username}' already exists.")
         return False
 
-    auth_salt = generate_salt()
-    enc_salt = generate_salt()
-
-    auth_key = derive_key(master_password, auth_salt)
-    users[username] = {
-        "auth_salt": base64.b64encode(auth_salt).decode(),
-        "enc_salt": base64.b64encode(enc_salt).decode(),
-        "password": auth_key.decode()
-    }
-    
-    save_users(users)
+    # v2: a random data key (the Fernet key) wrapped under an Argon2id key derived from the master password
+    kdf = {"salt": base64.b64encode(generate_salt()).decode(), **ARGON2_PARAMS}
+    save_users({**users, username: {"version": 2, "kdf": kdf, "wrapped_key": wrap_data_key(Fernet.generate_key(), master_password, kdf)}})
     print(f"User '{username}' registered successfully.")
     logger.info(f"User '{username}' registered successfully.")
     return True
