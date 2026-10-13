@@ -74,6 +74,12 @@ def test_validate_users_accepts_v2_records(make_v2_user):
     assert validate_users(make_v2_user()) is True
 
 
+# --- v1 records stay valid next to v2 records (mid-migration users.json) ---
+@pytest.mark.unit
+def test_validate_users_still_accepts_v1_records(make_user, make_v2_user):
+    assert validate_users({**make_user(username="alice"), **make_v2_user(username="bob")}) is True
+
+
 # --- Multiple users, one invalid ---
 @pytest.mark.unit
 def test_validate_users_one_user_invalid(caplog, valid_users):
