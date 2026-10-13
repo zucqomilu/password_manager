@@ -5,6 +5,11 @@ from .constants import ARGON2_PARAMS
 from .storage import save_users, load_users
 from .logger import logger
 
+# A v2 record: fresh random salt plus the current Argon2id costs, with data_key wrapped under the master password
+def make_v2_record(data_key: bytes, master_password: str) -> dict:
+    kdf = {"salt": base64.b64encode(generate_salt()).decode(), **ARGON2_PARAMS}
+    return {"version": 2, "kdf": kdf, "wrapped_key": wrap_data_key(data_key, master_password, kdf)}
+
 def register_user(username: str, master_password: str) -> bool:
     users = load_users()
 
@@ -19,8 +24,7 @@ def register_user(username: str, master_password: str) -> bool:
         return False
 
     # v2: a random data key (the Fernet key) wrapped under an Argon2id key derived from the master password
-    kdf = {"salt": base64.b64encode(generate_salt()).decode(), **ARGON2_PARAMS}
-    save_users({**users, username: {"version": 2, "kdf": kdf, "wrapped_key": wrap_data_key(Fernet.generate_key(), master_password, kdf)}})
+    save_users({**users, username: make_v2_record(Fernet.generate_key(), master_password)})
     print(f"User '{username}' registered successfully.")
     logger.info(f"User '{username}' registered successfully.")
     return True
@@ -60,3 +64,8 @@ def authenticate_user(username: str, password: str) -> bytes:
     fernet_key = derive_key(password + ":fernet", enc_salt)
     logger.info(f"User '{username}' authenticated successfully.")
     return fernet_key
+
+# Wrap the v1 Fernet key (the key every vault entry is already encrypted with) in a v2 record,
+# so upgrading never re-encrypts the vault. Pure: the caller decides when to save.
+def upgrade_user_record(record: dict, master_password: str) -> dict:
+    return make_v2_record(derive_key(master_password + ":fernet", base64.b64decode(record["enc_salt"])), master_password)

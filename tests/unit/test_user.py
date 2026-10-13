@@ -1,6 +1,6 @@
 import logging
 import pytest
-from password_manager.user import register_user, authenticate_user
+from password_manager.user import register_user, authenticate_user, upgrade_user_record
 from unittest.mock import patch
 from cryptography.fernet import Fernet
 from password_manager.crypto import unwrap_data_key
@@ -73,3 +73,13 @@ def test_authenticate_user_corrupted_users_file():
     with patch("password_manager.user.load_users", return_value=None):
         with pytest.raises(ValueError, match="User database is corrupted."):
             authenticate_user("nosuchuser", "anypassword")
+
+@pytest.mark.unit
+def test_upgrade_user_record_wraps_the_existing_v1_fernet_key_in_a_v2_record(make_user):
+    v1_users = make_user()
+    with patch("password_manager.user.load_users", return_value=v1_users):
+        v1_fernet_key = authenticate_user("alice", "alice_wonderland")
+    v2_record = upgrade_user_record(v1_users["alice"], "alice_wonderland")
+    assert validate_users({"alice": v2_record}) is True
+    assert v2_record["version"] == 2
+    assert unwrap_data_key(v2_record["wrapped_key"], "alice_wonderland", v2_record["kdf"]) == v1_fernet_key
