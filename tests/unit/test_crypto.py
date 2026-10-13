@@ -53,3 +53,9 @@ def test_wrap_and_unwrap_data_key_round_trip():
     params = {"salt": base64.b64encode(b"0123456789abcdef").decode(), "time_cost": 2, "memory_cost": 64, "parallelism": 2}
     data_key = Fernet.generate_key()
     assert unwrap_data_key(wrap_data_key(data_key, "securepassword", params), "securepassword", params) == data_key
+
+@pytest.mark.unit
+def test_unwrap_data_key_raises_value_error_for_a_wrong_password():
+    params = {"salt": base64.b64encode(b"0123456789abcdef").decode(), "time_cost": 2, "memory_cost": 64, "parallelism": 2}
+    with pytest.raises(ValueError, match="Incorrect password."):
+        unwrap_data_key(wrap_data_key(Fernet.generate_key(), "securepassword", params), "wrongpassword", params)

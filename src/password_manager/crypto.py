@@ -3,6 +3,7 @@ import secrets
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
@@ -37,7 +38,11 @@ def wrap_data_key(data_key: bytes, password: str, params: dict) -> str:
     nonce = secrets.token_bytes(12)
     return base64.b64encode(nonce + AESGCM(derive_master_key(password, params)).encrypt(nonce, data_key, None)).decode()
 
-# Decrypt a data key wrapped by wrap_data_key()
+# Decrypt a data key wrapped by wrap_data_key().
+# GCM authentication fails for a wrong password (or a tampered blob), which becomes the same error authenticate_user() raises.
 def unwrap_data_key(wrapped: str, password: str, params: dict) -> bytes:
     blob = base64.b64decode(wrapped)
-    return AESGCM(derive_master_key(password, params)).decrypt(blob[:12], blob[12:], None)
+    try:
+        return AESGCM(derive_master_key(password, params)).decrypt(blob[:12], blob[12:], None)
+    except InvalidTag:
+        raise ValueError("Incorrect password.") from None
