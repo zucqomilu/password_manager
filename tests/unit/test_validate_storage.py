@@ -1,4 +1,4 @@
-import pytest, logging
+import pytest, logging, base64
 from ..conftest import b64
 from password_manager.validate_storage import validate_users, validate_vault, is_valid_base64
 
@@ -86,6 +86,25 @@ def test_validate_users_still_accepts_v1_records(make_user, make_v2_user):
 def test_validate_users_rejects_v2_record_missing_kdf_param(caplog, make_v2_user, param):
     users = make_v2_user()
     del users["alice"]["kdf"][param]
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert f"User 'alice' field 'kdf' is missing or invalid: {param}." in caplog.text
+
+
+# --- v2 record with a present but invalid Argon2id parameter ---
+@pytest.mark.unit
+@pytest.mark.parametrize("param, value", [
+    ("salt", base64.b64encode(b"short").decode()),
+    ("salt", "not base64!"),
+    ("time_cost", 0),
+    ("memory_cost", -1),
+    ("parallelism", True),
+    ("time_cost", "3"),
+    ("unexpected", 1),
+])
+def test_validate_users_rejects_v2_record_with_invalid_kdf_param_values(caplog, make_v2_user, param, value):
+    users = make_v2_user()
+    users["alice"]["kdf"][param] = value
     with caplog.at_level(logging.ERROR):
         assert validate_users(users) is False
         assert f"User 'alice' field 'kdf' is missing or invalid: {param}." in caplog.text
