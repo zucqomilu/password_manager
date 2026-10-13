@@ -2,6 +2,7 @@ import base64
 import secrets
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
@@ -29,3 +30,14 @@ def derive_master_key(password: str, params: dict) -> bytes:
         lanes=params["parallelism"],
         memory_cost=params["memory_cost"],
     ).derive(password.encode())
+
+# Encrypt the data key with AES-256-GCM under the Argon2id key, using a fresh random nonce per wrap.
+# Returns base64(nonce + ciphertext) so it can be stored in users.json.
+def wrap_data_key(data_key: bytes, password: str, params: dict) -> str:
+    nonce = secrets.token_bytes(12)
+    return base64.b64encode(nonce + AESGCM(derive_master_key(password, params)).encrypt(nonce, data_key, None)).decode()
+
+# Decrypt a data key wrapped by wrap_data_key()
+def unwrap_data_key(wrapped: str, password: str, params: dict) -> bytes:
+    blob = base64.b64decode(wrapped)
+    return AESGCM(derive_master_key(password, params)).decrypt(blob[:12], blob[12:], None)
