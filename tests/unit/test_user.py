@@ -1,3 +1,4 @@
+import logging
 import pytest
 from password_manager.user import register_user, authenticate_user
 from unittest.mock import patch
@@ -30,6 +31,14 @@ def test_authenticate_user_returns_the_data_key_for_a_v2_user(make_v2_user):
     data_key = Fernet.generate_key()
     with patch("password_manager.user.load_users", return_value=make_v2_user(data_key=data_key)):
         assert authenticate_user("alice", "alice_wonderland") == data_key
+
+@pytest.mark.unit
+def test_authenticate_user_rejects_a_wrong_password_for_a_v2_user(caplog, make_v2_user):
+    with patch("password_manager.user.load_users", return_value=make_v2_user()), \
+         caplog.at_level(logging.ERROR), \
+         pytest.raises(ValueError, match="Incorrect password."):
+        authenticate_user("alice", "wrongpassword")
+    assert "Incorrect password." in caplog.text
 
 @pytest.mark.unit
 def test_authenticate_user_incorrect_password(valid_user):

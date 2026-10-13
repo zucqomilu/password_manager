@@ -45,7 +45,11 @@ def authenticate_user(username: str, password: str) -> bytes:
 
     # v2: the password unwraps the stored data key (Argon2id + AES-GCM); v1 records fall through unchanged
     if user_data.get("version") == 2:
-        data_key = unwrap_data_key(user_data["wrapped_key"], password, user_data["kdf"])
+        try:
+            data_key = unwrap_data_key(user_data["wrapped_key"], password, user_data["kdf"])
+        except ValueError:
+            logger.error("Incorrect password.")
+            raise
         logger.info(f"User '{username}' authenticated successfully.")
         return data_key
 
