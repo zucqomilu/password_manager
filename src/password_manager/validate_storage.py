@@ -3,6 +3,11 @@ from .logger import logger
 
 REQUIRED_USER_KEYS = {"auth_salt", "enc_salt", "password"}
 
+REQUIRED_V2_USER_KEYS = {"version", "kdf", "wrapped_key"}
+
+# nonce (12) + AES-GCM encrypted Fernet key (44) + GCM tag (16)
+WRAPPED_KEY_LENGTH = 72
+
 DECODED_LENGTH_MIN = 16
 
 EXPECTED_LENGTHS = {
@@ -23,6 +28,23 @@ def is_valid_base64(value, expected_decoded_len=None):
     except Exception:
         return False
 
+# Strict standard base64 (as written by crypto.py); urlsafe_b64decode would silently drop '+' and '/'
+def is_strict_base64(value, expected_decoded_len):
+    try:
+        return isinstance(value, str) and len(base64.b64decode(value, validate=True)) == expected_decoded_len
+    except ValueError:
+        return False
+
+# A v2 record holds Argon2id parameters and the data key wrapped under the master password
+def validate_v2_user(username, record) -> bool:
+    if set(record.keys()) != REQUIRED_V2_USER_KEYS:
+        logger.error(f"User '{username}' v2 record must have exactly the fields: {', '.join(sorted(REQUIRED_V2_USER_KEYS))}.")
+        return False
+    if not is_strict_base64(record["wrapped_key"], WRAPPED_KEY_LENGTH):
+        logger.error(f"User '{username}' field 'wrapped_key' has invalid base64 format.")
+        return False
+    return True
+
 def validate_users(data) -> bool:
     if not isinstance(data, dict):
         logger.error(f"Invalid users format: expected dict at top level — got {type(data).__name__}.")
@@ -32,7 +54,12 @@ def validate_users(data) -> bool:
         if not isinstance(record, dict):
             logger.error(f"User '{username}' has invalid data type: expected dict, got {type(record).__name__}.")
             return False
-        
+
+        if record.get("version") == 2:
+            if not validate_v2_user(username, record):
+                return False
+            continue
+
         record_keys = set(record.keys())
         if record_keys != REQUIRED_USER_KEYS:
             missing = REQUIRED_USER_KEYS - record_keys

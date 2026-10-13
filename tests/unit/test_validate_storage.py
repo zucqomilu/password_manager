@@ -68,6 +68,12 @@ def test_validate_users_valid(valid_user):
     assert validate_users(valid_user) is True
 
 
+# --- Valid v2 (Argon2id + wrapped data key) record ---
+@pytest.mark.unit
+def test_validate_users_accepts_v2_records(make_v2_user):
+    assert validate_users(make_v2_user()) is True
+
+
 # --- Multiple users, one invalid ---
 @pytest.mark.unit
 def test_validate_users_one_user_invalid(caplog, valid_users):
