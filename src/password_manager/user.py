@@ -59,11 +59,15 @@ def authenticate_user(username: str, password: str) -> bytes:
     except ValueError:
         logger.error("Incorrect password.")
         raise
-    # Without a backup there is no rollback path, so stay on v1 and retry the upgrade on the next login
-    if backup_users():
-        save_users({**users, username: upgraded})
-    else:
-        logger.error("users.json backup failed; staying on v1 for now.")
+    # Without a backup there is no rollback path, so stay on v1 and retry the upgrade on the next login.
+    # A disk error (full, permissions) must never block login: the atomic save leaves the v1 record intact.
+    try:
+        if backup_users():
+            save_users({**users, username: upgraded})
+        else:
+            logger.error("users.json backup failed; staying on v1 for now.")
+    except OSError:
+        logger.error("Could not save the v2 upgrade; staying on v1 for now.")
     logger.info(f"User '{username}' authenticated successfully.")
     return derive_key(password + ":fernet", base64.b64decode(user_data["enc_salt"]))
 
