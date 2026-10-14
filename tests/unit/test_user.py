@@ -83,3 +83,8 @@ def test_upgrade_user_record_wraps_the_existing_v1_fernet_key_in_a_v2_record(mak
     assert validate_users({"alice": v2_record}) is True
     assert v2_record["version"] == 2
     assert unwrap_data_key(v2_record["wrapped_key"], "alice_wonderland", v2_record["kdf"]) == v1_fernet_key
+
+@pytest.mark.unit
+def test_upgrade_user_record_raises_value_error_for_a_wrong_v1_password(make_user):
+    with pytest.raises(ValueError, match="Incorrect password."):
+        upgrade_user_record(make_user()["alice"], "wrongpassword")

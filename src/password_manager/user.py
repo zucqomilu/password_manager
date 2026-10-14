@@ -1,4 +1,5 @@
 import base64
+import hmac
 from cryptography.fernet import Fernet
 from .crypto import derive_key, generate_salt, unwrap_data_key, wrap_data_key
 from .constants import ARGON2_PARAMS
@@ -67,5 +68,8 @@ def authenticate_user(username: str, password: str) -> bytes:
 
 # Wrap the v1 Fernet key (the key every vault entry is already encrypted with) in a v2 record,
 # so upgrading never re-encrypts the vault. Pure: the caller decides when to save.
+# Refuses a wrong password, which would otherwise wrap a wrong key and lock the user out of the vault.
 def upgrade_user_record(record: dict, master_password: str) -> dict:
+    if not hmac.compare_digest(derive_key(master_password, base64.b64decode(record["auth_salt"])).decode(), record["password"]):
+        raise ValueError("Incorrect password.")
     return make_v2_record(derive_key(master_password + ":fernet", base64.b64decode(record["enc_salt"])), master_password)
