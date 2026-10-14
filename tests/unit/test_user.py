@@ -130,3 +130,13 @@ def test_authenticate_user_still_logs_in_with_the_v1_key_when_saving_the_upgrade
          caplog.at_level(logging.ERROR):
         assert authenticate_user("alice", "alice_wonderland") == derive_key("alice_wonderland:fernet", b"abcdefghijklmnop")
     assert "Could not save the v2 upgrade; staying on v1 for now." in caplog.text
+
+@pytest.mark.unit
+def test_authenticate_user_leaves_a_v1_record_untouched_on_a_wrong_password(make_user):
+    with patch("password_manager.user.load_users", return_value=make_user()), \
+         patch("password_manager.user.backup_users") as mock_backup, \
+         patch("password_manager.user.save_users") as mock_save, \
+         pytest.raises(ValueError, match="Incorrect password."):
+        authenticate_user("alice", "wrongpassword")
+    mock_backup.assert_not_called()
+    mock_save.assert_not_called()
