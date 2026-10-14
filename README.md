@@ -7,7 +7,8 @@ The project is currently intended for **learning and personal use**, with the lo
 ## Features
 
 * User registration and authentication
-* Master password-based encryption
+* Master password-based encryption, with the vault key wrapped under an **Argon2id**-derived key
+* Existing accounts are upgraded automatically on the next login, with a `users.json` backup made first
 * Encrypted password and login storage
 * Secure password generation using Python's `secrets` module
 * Password retrieval and clipboard integration
@@ -29,60 +30,54 @@ The project is currently intended for **learning and personal use**, with the lo
 
 ## Security Overview
 
-The password manager uses the user's master password to derive cryptographic keys using **PBKDF2-HMAC-SHA256**.
+Every user has a random **data key**: the [Fernet](https://cryptography.io/en/latest/fernet/) key that encrypts the vault entries. The data key is never stored in plain form. Instead it is **wrapped** (encrypted) under a key derived from the master password with **Argon2id**, and only the wrapped form is written to `users.json`.
 
-Two independent salts are generated for each user:
-
-* An authentication salt used to derive the key used for authentication.
-* An encryption salt used to derive the Fernet key used to encrypt vault credentials.
-
-The encryption key is derived from the master password and the encryption salt using a separate derivation input:
+Conceptually:
 
 ```text
-master password + ":fernet"
+Master password + salt --Argon2id--> key-encryption key
+                                           |
+                     AES-256-GCM unwrap    v
+users.json "wrapped_key" ------------> data key (Fernet) ---> decrypts vault entries
 ```
 
-The resulting key is used with [Fernet](https://cryptography.io/en/latest/fernet/) for symmetric encryption.
+Because the data key is separate from the master password, the vault never has to be re-encrypted when the key derivation changes.
 
-### Key derivation
+### Key derivation (v2 accounts)
 
-The current implementation uses:
-
-* Algorithm: PBKDF2-HMAC-SHA256
+* Algorithm: Argon2id (RFC 9106 low-memory profile)
+* Time cost: 3
+* Memory cost: 64 MiB
+* Parallelism: 4
+* Salt: 16 random bytes per user
 * Derived key length: 32 bytes
-* Iterations: 100,000
-* Authentication salt: 16 bytes
-* Encryption salt: 16 bytes
 
-The derived keys are encoded using URL-safe Base64 where required for storage and Fernet compatibility.
+The parameters are stored with each user, so they can be raised later without breaking existing accounts.
+
+### Key wrapping
+
+* The data key is encrypted with AES-256-GCM under the Argon2id key, with a fresh random 12-byte nonce.
+* Stored as Base64 of `nonce + ciphertext + tag` (72 bytes).
 
 ## Authentication
 
-When a user registers, the application generates two cryptographically random salts.
+When a user registers, the application generates a random data key and a random salt, derives the Argon2id key from the master password, and stores the Argon2id parameters and the wrapped data key in `users.json`.
 
-The authentication key is derived from the master password and authentication salt and stored in `users.json`.
+The master password is **never stored**, and v2 accounts store **no password hash** either.
 
-The master password itself is **never stored**.
+During login, the application derives the Argon2id key again and unwraps the data key. AES-GCM authenticates the unwrap, so a wrong master password fails with `Incorrect password.` and never yields a key. On success, the data key is stored in the session.
 
-During login, the application derives the authentication key again and compares it with the stored value. If authentication succeeds, the application derives the Fernet encryption key and creates a session.
+### Accounts created before Argon2id (v1)
 
-Conceptually, the process is:
+Older accounts use PBKDF2-HMAC-SHA256 (100,000 iterations): an authentication key derived from the master password and an authentication salt is stored as a verifier, and the Fernet key is derived from `master password + ":fernet"` and an encryption salt.
 
-```text
-                    Master Password
-                           |
-              +------------+------------+
-              |                         |
-              v                         v
-       Authentication              Encryption
-           salt                       salt
-              |                         |
-              v                         v
-          PBKDF2                    PBKDF2
-              |                         |
-              v                         v
-      Authentication key        Fernet encryption key
-```
+The first successful login of a v1 account upgrades it to v2:
+
+1. The master password is checked against the v1 verifier.
+2. A backup of `users.json` is written (`users_backup_YYYYMMDD_HHMMSS_ffffff.json`) and its path is printed.
+3. The existing Fernet key is wrapped under a new Argon2id key and the record is replaced.
+
+The vault itself is not touched: the same Fernet key keeps decrypting every entry. If the backup or the save fails (for example on a full disk), login still succeeds on v1 and the upgrade is retried at the next login. A wrong password never changes `users.json`.
 
 ## Vault Encryption
 
@@ -142,7 +137,7 @@ The session uses a **15-minute time-to-live (TTL)**.
 
 After successful authentication:
 
-1. The Fernet encryption key is generated.
+1. The data key (Fernet key) is unwrapped, or derived for a not-yet-upgraded v1 account.
 2. The username, Fernet key, and activity timestamp are stored in the system keyring.
 3. Subsequent commands load the session from the keyring.
 4. The session timestamp is checked against the 15-minute TTL.
@@ -176,14 +171,31 @@ Example:
 ```json
 {
     "jonathan": {
-        "auth_salt": "...",
-        "enc_salt": "...",
-        "password": "..."
+        "version": 2,
+        "kdf": {
+            "salt": "...",
+            "time_cost": 3,
+            "memory_cost": 65536,
+            "parallelism": 4
+        },
+        "wrapped_key": "..."
     }
 }
 ```
 
+Records without `"version"` are v1 records (`auth_salt`, `enc_salt`, `password`). They are still read, and are upgraded to v2 on the next successful login.
+
 The master password itself is not stored.
+
+### `users_backup_*.json`
+
+Before a v1 account is upgraded, `users.json` is copied next to itself (with `0600` permissions):
+
+```text
+users_backup_YYYYMMDD_HHMMSS_ffffff.json
+```
+
+Older versions of `pm` cannot read v2 records. To roll back to an older version, copy this backup over `users.json`; the vault does not need to be restored. The backup contains the v1 password verifier, so delete it once you have confirmed that the upgraded account works (for example with `pm verify`).
 
 ### `vault.json`
 
@@ -718,7 +730,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
 
-The current test suite contains **258 tests**.
+The current test suite contains **297 tests**.
 
 Coverage can be generated with:
 
@@ -729,8 +741,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-546 statements
-546 statements covered
+616 statements
+616 statements covered
 100% coverage
 ```
 
@@ -780,6 +792,7 @@ Users should protect:
   * `vault.json`
   * `users.json`
   * Vault backups
+  * `users.json` backups
 * The user's operating-system account
 * The operating-system keyring
 
@@ -794,7 +807,7 @@ Sessions expire after 15 minutes of inactivity.
 The project is actively being developed. Current limitations include:
 
 * No password recovery mechanism
-* No built-in master-password change workflow
+* No built-in master-password change workflow (key wrapping makes one possible without re-encrypting the vault)
 * No synchronization between devices
 * No secure remote backup mechanism
 * No graphical user interface
