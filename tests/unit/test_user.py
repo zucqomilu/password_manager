@@ -37,7 +37,8 @@ def test_register_user_user_exists():
 
 @pytest.mark.unit
 def test_authenticate_user_success(make_user):
-    with patch("password_manager.user.load_users", return_value=make_user()):
+    with patch("password_manager.user.load_users", return_value=make_user()), \
+         patch("password_manager.user.save_users"):
         key = authenticate_user("alice", "alice_wonderland")
         assert isinstance(key, bytes)
         assert len(key) == 44  # base64 encoded Fernet key
@@ -88,3 +89,14 @@ def test_upgrade_user_record_wraps_the_existing_v1_fernet_key_in_a_v2_record(mak
 def test_upgrade_user_record_raises_value_error_for_a_wrong_v1_password(make_user):
     with pytest.raises(ValueError, match="Incorrect password."):
         upgrade_user_record(make_user()["alice"], "wrongpassword")
+
+@pytest.mark.unit
+def test_authenticate_user_upgrades_a_v1_user_to_v2_on_successful_login(make_user, make_v2_user):
+    users = {**make_user(username="alice"), **make_v2_user(username="bob")}
+    with patch("password_manager.user.load_users", return_value=users), \
+         patch("password_manager.user.save_users") as mock_save:
+        fernet_key = authenticate_user("alice", "alice_wonderland")
+    saved = mock_save.call_args.args[0]
+    assert saved["alice"]["version"] == 2
+    assert unwrap_data_key(saved["alice"]["wrapped_key"], "alice_wonderland", saved["alice"]["kdf"]) == fernet_key
+    assert saved["bob"] == users["bob"]

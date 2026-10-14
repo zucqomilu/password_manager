@@ -52,19 +52,16 @@ def authenticate_user(username: str, password: str) -> bytes:
         logger.info(f"User '{username}' authenticated successfully.")
         return data_key
 
-    auth_salt = base64.b64decode(user_data["auth_salt"])
-    enc_salt = base64.b64decode(user_data["enc_salt"])
-    
-    stored_key = user_data["password"]
-    derived_auth_key = derive_key(password, auth_salt).decode()
-
-    if derived_auth_key != stored_key:
+    # v1: upgrade_user_record() checks the PBKDF2 password (constant-time) and wraps the same Fernet key in a v2 record,
+    # so the vault is untouched. A failed save leaves the v1 record on disk and is retried on the next login.
+    try:
+        upgraded = upgrade_user_record(user_data, password)
+    except ValueError:
         logger.error("Incorrect password.")
-        raise ValueError("Incorrect password.")
-
-    fernet_key = derive_key(password + ":fernet", enc_salt)
+        raise
+    save_users({**users, username: upgraded})
     logger.info(f"User '{username}' authenticated successfully.")
-    return fernet_key
+    return derive_key(password + ":fernet", base64.b64decode(user_data["enc_salt"]))
 
 # Wrap the v1 Fernet key (the key every vault entry is already encrypted with) in a v2 record,
 # so upgrading never re-encrypts the vault. Pure: the caller decides when to save.
