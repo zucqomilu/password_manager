@@ -124,6 +124,17 @@ def test_validate_users_rejects_v2_record_with_missing_or_extra_top_level_fields
         assert "User 'alice' v2 record must have exactly the fields: kdf, version, wrapped_key." in caplog.text
 
 
+# --- v2 record whose kdf is not a dict ---
+@pytest.mark.unit
+@pytest.mark.parametrize("kdf", [None, "argon2id", ["salt", "time_cost", "memory_cost", "parallelism"]])
+def test_validate_users_rejects_v2_record_whose_kdf_is_not_a_dict(caplog, make_v2_user, kdf):
+    users = make_v2_user()
+    users["alice"]["kdf"] = kdf
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' field 'kdf' must be a dict." in caplog.text
+
+
 # --- Multiple users, one invalid ---
 @pytest.mark.unit
 def test_validate_users_one_user_invalid(caplog, valid_users):
