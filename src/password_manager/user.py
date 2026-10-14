@@ -1,7 +1,15 @@
 import base64
-from .crypto import derive_key, generate_salt
-from .storage import save_users, load_users
+import hmac
+from cryptography.fernet import Fernet
+from .crypto import derive_key, generate_salt, unwrap_data_key, wrap_data_key
+from .constants import ARGON2_PARAMS
+from .storage import save_users, load_users, backup_users
 from .logger import logger
+
+# A v2 record: fresh random salt plus the current Argon2id costs, with data_key wrapped under the master password
+def make_v2_record(data_key: bytes, master_password: str) -> dict:
+    kdf = {"salt": base64.b64encode(generate_salt()).decode(), **ARGON2_PARAMS}
+    return {"version": 2, "kdf": kdf, "wrapped_key": wrap_data_key(data_key, master_password, kdf)}
 
 def register_user(username: str, master_password: str) -> bool:
     users = load_users()
@@ -16,17 +24,8 @@ def register_user(username: str, master_password: str) -> bool:
         logger.warning(f"User '{username}' already exists.")
         return False
 
-    auth_salt = generate_salt()
-    enc_salt = generate_salt()
-
-    auth_key = derive_key(master_password, auth_salt)
-    users[username] = {
-        "auth_salt": base64.b64encode(auth_salt).decode(),
-        "enc_salt": base64.b64encode(enc_salt).decode(),
-        "password": auth_key.decode()
-    }
-    
-    save_users(users)
+    # v2: a random data key (the Fernet key) wrapped under an Argon2id key derived from the master password
+    save_users({**users, username: make_v2_record(Fernet.generate_key(), master_password)})
     print(f"User '{username}' registered successfully.")
     logger.info(f"User '{username}' registered successfully.")
     return True
@@ -42,16 +41,40 @@ def authenticate_user(username: str, password: str) -> bytes:
         raise ValueError("User does not exist.")
 
     user_data = users[username]
-    auth_salt = base64.b64decode(user_data["auth_salt"])
-    enc_salt = base64.b64decode(user_data["enc_salt"])
-    
-    stored_key = user_data["password"]
-    derived_auth_key = derive_key(password, auth_salt).decode()
 
-    if derived_auth_key != stored_key:
+    # v2: the password unwraps the stored data key (Argon2id + AES-GCM); v1 records fall through unchanged
+    if user_data.get("version") == 2:
+        try:
+            data_key = unwrap_data_key(user_data["wrapped_key"], password, user_data["kdf"])
+        except ValueError:
+            logger.error("Incorrect password.")
+            raise
+        logger.info(f"User '{username}' authenticated successfully.")
+        return data_key
+
+    # v1: upgrade_user_record() checks the PBKDF2 password (constant-time) and wraps the same Fernet key in a v2 record,
+    # so the vault is untouched. users.json is backed up first; a failed save leaves the v1 record on disk and is retried on the next login.
+    try:
+        upgraded = upgrade_user_record(user_data, password)
+    except ValueError:
         logger.error("Incorrect password.")
-        raise ValueError("Incorrect password.")
-
-    fernet_key = derive_key(password + ":fernet", enc_salt)
+        raise
+    # Without a backup there is no rollback path, so stay on v1 and retry the upgrade on the next login.
+    # A disk error (full, permissions) must never block login: the atomic save leaves the v1 record intact.
+    try:
+        if backup_users():
+            save_users({**users, username: upgraded})
+        else:
+            logger.error("users.json backup failed; staying on v1 for now.")
+    except OSError:
+        logger.error("Could not save the v2 upgrade; staying on v1 for now.")
     logger.info(f"User '{username}' authenticated successfully.")
-    return fernet_key
+    return derive_key(password + ":fernet", base64.b64decode(user_data["enc_salt"]))
+
+# Wrap the v1 Fernet key (the key every vault entry is already encrypted with) in a v2 record,
+# so upgrading never re-encrypts the vault. Pure: the caller decides when to save.
+# Refuses a wrong password, which would otherwise wrap a wrong key and lock the user out of the vault.
+def upgrade_user_record(record: dict, master_password: str) -> dict:
+    if not hmac.compare_digest(derive_key(master_password, base64.b64decode(record["auth_salt"])).decode(), record["password"]):
+        raise ValueError("Incorrect password.")
+    return make_v2_record(derive_key(master_password + ":fernet", base64.b64decode(record["enc_salt"])), master_password)

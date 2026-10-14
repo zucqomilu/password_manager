@@ -2,7 +2,7 @@ import pytest, base64, json, builtins, tempfile, os, shutil, time
 import keyring
 from keyring.backends.null import Keyring as NullKeyring
 from keyring.errors import PasswordDeleteError
-from password_manager.crypto import derive_key
+from password_manager.crypto import derive_key, wrap_data_key
 from cryptography.fernet import Fernet
 from unittest.mock import mock_open, patch
 
@@ -143,6 +143,16 @@ def make_user():
             }
         })
     return _make_user
+
+
+# A v2 user record: Argon2id parameters plus the data key wrapped under the master password.
+# Tiny Argon2id costs keep tests fast; real records use the defaults from register_user().
+@pytest.fixture
+def make_v2_user():
+    def _make_v2_user(username="alice", password="alice_wonderland", data_key=None, salt=b"1234567890123456"):
+        kdf = {"salt": base64.b64encode(salt).decode(), "time_cost": 2, "memory_cost": 64, "parallelism": 2}
+        return {username: {"version": 2, "kdf": kdf, "wrapped_key": wrap_data_key(data_key or Fernet.generate_key(), password, kdf)}}
+    return _make_v2_user
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-import pytest, logging
+import pytest, logging, base64
 from ..conftest import b64
 from password_manager.validate_storage import validate_users, validate_vault, is_valid_base64
 
@@ -66,6 +66,89 @@ def test_is_valid_base64_with_invalid_chars():
 @pytest.mark.unit
 def test_validate_users_valid(valid_user):
     assert validate_users(valid_user) is True
+
+
+# --- Valid v2 (Argon2id + wrapped data key) record ---
+@pytest.mark.unit
+def test_validate_users_accepts_v2_records(make_v2_user):
+    assert validate_users(make_v2_user()) is True
+
+
+# --- v1 records stay valid next to v2 records (mid-migration users.json) ---
+@pytest.mark.unit
+def test_validate_users_still_accepts_v1_records(make_user, make_v2_user):
+    assert validate_users({**make_user(username="alice"), **make_v2_user(username="bob")}) is True
+
+
+# --- v2 record missing one of its Argon2id parameters ---
+@pytest.mark.unit
+@pytest.mark.parametrize("param", ["salt", "time_cost", "memory_cost", "parallelism"])
+def test_validate_users_rejects_v2_record_missing_kdf_param(caplog, make_v2_user, param):
+    users = make_v2_user()
+    del users["alice"]["kdf"][param]
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert f"User 'alice' field 'kdf' is missing or invalid: {param}." in caplog.text
+
+
+# --- v2 record with a present but invalid Argon2id parameter ---
+@pytest.mark.unit
+@pytest.mark.parametrize("param, value", [
+    ("salt", base64.b64encode(b"short").decode()),
+    ("salt", "not base64!"),
+    ("time_cost", 0),
+    ("memory_cost", -1),
+    ("parallelism", True),
+    ("time_cost", "3"),
+    ("unexpected", 1),
+])
+def test_validate_users_rejects_v2_record_with_invalid_kdf_param_values(caplog, make_v2_user, param, value):
+    users = make_v2_user()
+    users["alice"]["kdf"][param] = value
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert f"User 'alice' field 'kdf' is missing or invalid: {param}." in caplog.text
+
+
+# --- v2 record with a missing or an extra top-level field ---
+@pytest.mark.unit
+@pytest.mark.parametrize("change", [
+    lambda record: record.pop("wrapped_key"),
+    lambda record: record.update(password="leftover-v1-field"),
+], ids=["missing wrapped_key", "extra v1 password field"])
+def test_validate_users_rejects_v2_record_with_missing_or_extra_top_level_fields(caplog, make_v2_user, change):
+    users = make_v2_user()
+    change(users["alice"])
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' v2 record must have exactly the fields: kdf, version, wrapped_key." in caplog.text
+
+
+# --- v2 record whose kdf is not a dict ---
+@pytest.mark.unit
+@pytest.mark.parametrize("kdf", [None, "argon2id", ["salt", "time_cost", "memory_cost", "parallelism"]])
+def test_validate_users_rejects_v2_record_whose_kdf_is_not_a_dict(caplog, make_v2_user, kdf):
+    users = make_v2_user()
+    users["alice"]["kdf"] = kdf
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' field 'kdf' must be a dict." in caplog.text
+
+
+# --- v2 record with an invalid wrapped_key ---
+@pytest.mark.unit
+@pytest.mark.parametrize("wrapped_key", [
+    "not base64!",
+    base64.b64encode(bytes(71)).decode(),
+    base64.urlsafe_b64encode(b"\xfb" * 72).decode(),
+    None,
+], ids=["not base64", "71 bytes instead of 72", "urlsafe alphabet", "not a string"])
+def test_validate_users_rejects_v2_record_with_an_invalid_wrapped_key(caplog, make_v2_user, wrapped_key):
+    users = make_v2_user()
+    users["alice"]["wrapped_key"] = wrapped_key
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' field 'wrapped_key' has invalid base64 format." in caplog.text
 
 
 # --- Multiple users, one invalid ---
