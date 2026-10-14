@@ -1,7 +1,7 @@
 import logging
 import pytest
 from password_manager.user import register_user, authenticate_user, upgrade_user_record
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from cryptography.fernet import Fernet
 from password_manager.crypto import unwrap_data_key
 from password_manager.validate_storage import validate_users
@@ -100,3 +100,12 @@ def test_authenticate_user_upgrades_a_v1_user_to_v2_on_successful_login(make_use
     assert saved["alice"]["version"] == 2
     assert unwrap_data_key(saved["alice"]["wrapped_key"], "alice_wonderland", saved["alice"]["kdf"]) == fernet_key
     assert saved["bob"] == users["bob"]
+
+@pytest.mark.unit
+def test_authenticate_user_backs_up_users_json_before_upgrading_a_v1_record(make_user):
+    storage = Mock()
+    with patch("password_manager.user.load_users", return_value=make_user()), \
+         patch("password_manager.user.backup_users", storage.backup_users), \
+         patch("password_manager.user.save_users", storage.save_users):
+        authenticate_user("alice", "alice_wonderland")
+    assert [name for name, *_ in storage.mock_calls] == ["backup_users", "save_users"]

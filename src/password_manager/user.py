@@ -3,7 +3,7 @@ import hmac
 from cryptography.fernet import Fernet
 from .crypto import derive_key, generate_salt, unwrap_data_key, wrap_data_key
 from .constants import ARGON2_PARAMS
-from .storage import save_users, load_users
+from .storage import save_users, load_users, backup_users
 from .logger import logger
 
 # A v2 record: fresh random salt plus the current Argon2id costs, with data_key wrapped under the master password
@@ -53,12 +53,13 @@ def authenticate_user(username: str, password: str) -> bytes:
         return data_key
 
     # v1: upgrade_user_record() checks the PBKDF2 password (constant-time) and wraps the same Fernet key in a v2 record,
-    # so the vault is untouched. A failed save leaves the v1 record on disk and is retried on the next login.
+    # so the vault is untouched. users.json is backed up first; a failed save leaves the v1 record on disk and is retried on the next login.
     try:
         upgraded = upgrade_user_record(user_data, password)
     except ValueError:
         logger.error("Incorrect password.")
         raise
+    backup_users()
     save_users({**users, username: upgraded})
     logger.info(f"User '{username}' authenticated successfully.")
     return derive_key(password + ":fernet", base64.b64decode(user_data["enc_salt"]))
