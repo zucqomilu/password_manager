@@ -110,6 +110,20 @@ def test_validate_users_rejects_v2_record_with_invalid_kdf_param_values(caplog, 
         assert f"User 'alice' field 'kdf' is missing or invalid: {param}." in caplog.text
 
 
+# --- v2 record with a missing or an extra top-level field ---
+@pytest.mark.unit
+@pytest.mark.parametrize("change", [
+    lambda record: record.pop("wrapped_key"),
+    lambda record: record.update(password="leftover-v1-field"),
+], ids=["missing wrapped_key", "extra v1 password field"])
+def test_validate_users_rejects_v2_record_with_missing_or_extra_top_level_fields(caplog, make_v2_user, change):
+    users = make_v2_user()
+    change(users["alice"])
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' v2 record must have exactly the fields: kdf, version, wrapped_key." in caplog.text
+
+
 # --- Multiple users, one invalid ---
 @pytest.mark.unit
 def test_validate_users_one_user_invalid(caplog, valid_users):
