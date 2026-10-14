@@ -135,6 +135,22 @@ def test_validate_users_rejects_v2_record_whose_kdf_is_not_a_dict(caplog, make_v
         assert "User 'alice' field 'kdf' must be a dict." in caplog.text
 
 
+# --- v2 record with an invalid wrapped_key ---
+@pytest.mark.unit
+@pytest.mark.parametrize("wrapped_key", [
+    "not base64!",
+    base64.b64encode(bytes(71)).decode(),
+    base64.urlsafe_b64encode(b"\xfb" * 72).decode(),
+    None,
+], ids=["not base64", "71 bytes instead of 72", "urlsafe alphabet", "not a string"])
+def test_validate_users_rejects_v2_record_with_an_invalid_wrapped_key(caplog, make_v2_user, wrapped_key):
+    users = make_v2_user()
+    users["alice"]["wrapped_key"] = wrapped_key
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' field 'wrapped_key' has invalid base64 format." in caplog.text
+
+
 # --- Multiple users, one invalid ---
 @pytest.mark.unit
 def test_validate_users_one_user_invalid(caplog, valid_users):
