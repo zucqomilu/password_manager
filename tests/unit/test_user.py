@@ -3,7 +3,7 @@ import pytest
 from password_manager.user import register_user, authenticate_user, upgrade_user_record
 from unittest.mock import Mock, patch
 from cryptography.fernet import Fernet
-from password_manager.crypto import unwrap_data_key
+from password_manager.crypto import derive_key, unwrap_data_key
 from password_manager.validate_storage import validate_users
 
 @pytest.mark.unit
@@ -38,6 +38,7 @@ def test_register_user_user_exists():
 @pytest.mark.unit
 def test_authenticate_user_success(make_user):
     with patch("password_manager.user.load_users", return_value=make_user()), \
+         patch("password_manager.user.backup_users"), \
          patch("password_manager.user.save_users"):
         key = authenticate_user("alice", "alice_wonderland")
         assert isinstance(key, bytes)
@@ -94,6 +95,7 @@ def test_upgrade_user_record_raises_value_error_for_a_wrong_v1_password(make_use
 def test_authenticate_user_upgrades_a_v1_user_to_v2_on_successful_login(make_user, make_v2_user):
     users = {**make_user(username="alice"), **make_v2_user(username="bob")}
     with patch("password_manager.user.load_users", return_value=users), \
+         patch("password_manager.user.backup_users", return_value="users_backup.json"), \
          patch("password_manager.user.save_users") as mock_save:
         fernet_key = authenticate_user("alice", "alice_wonderland")
     saved = mock_save.call_args.args[0]
@@ -109,3 +111,11 @@ def test_authenticate_user_backs_up_users_json_before_upgrading_a_v1_record(make
          patch("password_manager.user.save_users", storage.save_users):
         authenticate_user("alice", "alice_wonderland")
     assert [name for name, *_ in storage.mock_calls] == ["backup_users", "save_users"]
+
+@pytest.mark.unit
+def test_authenticate_user_skips_the_upgrade_when_the_users_json_backup_fails(make_user):
+    with patch("password_manager.user.load_users", return_value=make_user(enc_salt=b"abcdefghijklmnop")), \
+         patch("password_manager.user.backup_users", return_value=None), \
+         patch("password_manager.user.save_users") as mock_save:
+        assert authenticate_user("alice", "alice_wonderland") == derive_key("alice_wonderland:fernet", b"abcdefghijklmnop")
+    mock_save.assert_not_called()
