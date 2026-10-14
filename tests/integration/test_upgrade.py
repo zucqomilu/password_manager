@@ -40,3 +40,24 @@ def test_v1_user_logs_in_is_upgraded_and_every_password_still_decrypts(v1_accoun
     with open(os.environ["VAULT_FILE"], "rb") as f:
         assert f.read() == vault_before  # never re-encrypted
     assert any(name.startswith("users_backup_") for name in os.listdir(v1_account))
+
+
+@pytest.mark.integration
+def test_after_upgrade_a_wrong_password_fails_and_the_right_one_still_works(v1_account, capsys):
+    main(["login", "--username", "alice", "--password", "alice_wonderland"])
+    main(["logout"])
+    with open(os.environ["USERS_FILE"], "rb") as f:
+        users_after_upgrade = f.read()
+    capsys.readouterr()
+
+    main(["login", "--username", "alice", "--password", "wrongpassword"])
+    assert capsys.readouterr().out == "Login failed: Incorrect password.\n"
+    main(["verify"])
+    assert capsys.readouterr().out == "You are not logged in. Please run `login` first.\n"
+    with open(os.environ["USERS_FILE"], "rb") as f:
+        assert f.read() == users_after_upgrade
+
+    main(["login", "--username", "alice", "--password", "alice_wonderland"])
+    assert capsys.readouterr().out.startswith("Login successful. Welcome, alice!\n")
+    main(["verify"])
+    assert capsys.readouterr().out == "3 entries OK\n"
