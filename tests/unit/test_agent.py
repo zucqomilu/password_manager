@@ -2,6 +2,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from password_manager.agent import AgentState, handle_request
+from password_manager.constants import SESSION_TTL
 
 
 @pytest.mark.unit
@@ -51,3 +52,11 @@ def test_handle_request_decrypt_returns_an_error_for_an_invalid_token(token):
 ], ids=["ENCRYPT", "DECRYPT"])
 def test_handle_request_returns_locked_for_encrypt_and_decrypt_when_no_key_is_held(request_):
     assert handle_request(AgentState(), request_, now=1000.0) == (AgentState(), {"ok": False, "error": "locked"})
+
+
+@pytest.mark.unit
+def test_handle_request_locks_when_idle_time_exceeds_session_ttl():
+    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    assert handle_request(state, {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"}, now=1000.0 + SESSION_TTL) == (
+        AgentState(), {"ok": False, "error": "locked"},
+    )

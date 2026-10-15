@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .constants import SESSION_TTL
+
 
 # What the agent holds between requests. All None means locked.
 # repr=False keeps the key out of any log line, print or traceback that shows the state.
@@ -20,9 +22,18 @@ def decrypt_response(key: bytes, token: str) -> dict:
         return {"ok": False, "error": "invalid token"}
 
 
+# Drop the key once it has been idle for SESSION_TTL (same >= boundary as the keyring session)
+def expire(state: AgentState, now: float) -> AgentState:
+    return AgentState() if state.key is not None and now - state.last_activity >= SESSION_TTL else state
+
+
 # Pure core of the session agent: takes the current state, one request and the current time,
 # and returns the new state plus the response to send back. The key is never put in a response.
 def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
+    return dispatch(expire(state, now), request, now)
+
+
+def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
     if request["cmd"] == "UNLOCK":
         return AgentState(username=request["username"], key=request["key"].encode(), last_activity=now), {"ok": True}
     # Checked before any Fernet call, so a locked agent answers cleanly instead of failing on a missing key
