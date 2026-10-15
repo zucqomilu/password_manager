@@ -19,3 +19,5 @@ def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentS
         return AgentState(username=request["username"], key=request["key"].encode(), last_activity=now), {"ok": True}
     if request["cmd"] == "ENCRYPT":
         return state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}
+    if request["cmd"] == "DECRYPT":
+        return state, {"ok": True, "plaintext": Fernet(state.key).decrypt(request["token"].encode()).decode()}

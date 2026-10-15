@@ -24,3 +24,11 @@ def test_handle_request_encrypt_returns_ciphertext_the_held_key_can_decrypt():
     _, response = handle_request(AgentState(username="alice", key=key, last_activity=1000.0), {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"}, now=1001.0)
     assert response["ok"] is True
     assert Fernet(key).decrypt(response["token"].encode()) == b"test-only-pass-1"
+
+
+@pytest.mark.unit
+def test_handle_request_decrypt_returns_plaintext_for_a_valid_token():
+    key = Fernet.generate_key()
+    token = Fernet(key).encrypt(b"test-only-pass-1").decode()
+    _, response = handle_request(AgentState(username="alice", key=key, last_activity=1000.0), {"cmd": "DECRYPT", "token": token}, now=1001.0)
+    assert response == {"ok": True, "plaintext": "test-only-pass-1"}
