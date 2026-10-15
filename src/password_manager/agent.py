@@ -1,11 +1,12 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 # What the agent holds between requests. All None means locked.
+# repr=False keeps the key out of any log line, print or traceback that shows the state.
 @dataclass(frozen=True)
 class AgentState:
     username: str | None = None
-    key: bytes | None = None
+    key: bytes | None = field(default=None, repr=False)
     last_activity: float | None = None
 
 

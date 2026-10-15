@@ -10,3 +10,9 @@ def test_handle_request_unlock_stores_the_username_and_key_in_the_returned_state
     state, response = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": key.decode()}, now=1000.0)
     assert response == {"ok": True}
     assert state == AgentState(username="alice", key=key, last_activity=1000.0)
+
+
+@pytest.mark.unit
+def test_agent_state_repr_never_shows_the_key():
+    key = Fernet.generate_key()
+    assert key.decode() not in repr(AgentState(username="alice", key=key, last_activity=1000.0))
