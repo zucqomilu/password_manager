@@ -16,3 +16,11 @@ def test_handle_request_unlock_stores_the_username_and_key_in_the_returned_state
 def test_agent_state_repr_never_shows_the_key():
     key = Fernet.generate_key()
     assert key.decode() not in repr(AgentState(username="alice", key=key, last_activity=1000.0))
+
+
+@pytest.mark.unit
+def test_handle_request_encrypt_returns_ciphertext_the_held_key_can_decrypt():
+    key = Fernet.generate_key()
+    _, response = handle_request(AgentState(username="alice", key=key, last_activity=1000.0), {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"}, now=1001.0)
+    assert response["ok"] is True
+    assert Fernet(key).decrypt(response["token"].encode()) == b"test-only-pass-1"
