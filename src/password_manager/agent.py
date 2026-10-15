@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 
 # What the agent holds between requests. All None means locked.
@@ -12,6 +12,14 @@ class AgentState:
     last_activity: float | None = None
 
 
+# A tampered, corrupt or foreign token never yields plaintext; the error carries no token, plaintext or key
+def decrypt_response(key: bytes, token: str) -> dict:
+    try:
+        return {"ok": True, "plaintext": Fernet(key).decrypt(token.encode()).decode()}
+    except InvalidToken:
+        return {"ok": False, "error": "invalid token"}
+
+
 # Pure core of the session agent: takes the current state, one request and the current time,
 # and returns the new state plus the response to send back. The key is never put in a response.
 def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
@@ -20,4 +28,4 @@ def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentS
     if request["cmd"] == "ENCRYPT":
         return state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}
     if request["cmd"] == "DECRYPT":
-        return state, {"ok": True, "plaintext": Fernet(state.key).decrypt(request["token"].encode()).decode()}
+        return state, decrypt_response(state.key, request["token"])
