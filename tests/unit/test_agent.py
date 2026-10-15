@@ -42,3 +42,12 @@ def test_handle_request_decrypt_returns_plaintext_for_a_valid_token():
 def test_handle_request_decrypt_returns_an_error_for_an_invalid_token(token):
     state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
     assert handle_request(state, {"cmd": "DECRYPT", "token": token}, now=1001.0) == (state, {"ok": False, "error": "invalid token"})
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("request_", [
+    {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"},
+    {"cmd": "DECRYPT", "token": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()},
+], ids=["ENCRYPT", "DECRYPT"])
+def test_handle_request_returns_locked_for_encrypt_and_decrypt_when_no_key_is_held(request_):
+    assert handle_request(AgentState(), request_, now=1000.0) == (AgentState(), {"ok": False, "error": "locked"})

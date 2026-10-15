@@ -25,6 +25,9 @@ def decrypt_response(key: bytes, token: str) -> dict:
 def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
     if request["cmd"] == "UNLOCK":
         return AgentState(username=request["username"], key=request["key"].encode(), last_activity=now), {"ok": True}
+    # Checked before any Fernet call, so a locked agent answers cleanly instead of failing on a missing key
+    if request["cmd"] in ("ENCRYPT", "DECRYPT") and state.key is None:
+        return state, {"ok": False, "error": "locked"}
     if request["cmd"] == "ENCRYPT":
         return state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}
     if request["cmd"] == "DECRYPT":
