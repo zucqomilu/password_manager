@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 from cryptography.fernet import Fernet
 
@@ -60,3 +62,14 @@ def test_handle_request_locks_when_idle_time_exceeds_session_ttl():
     assert handle_request(state, {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"}, now=1000.0 + SESSION_TTL) == (
         AgentState(), {"ok": False, "error": "locked"},
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cmd", ["ENCRYPT", "DECRYPT"])
+def test_handle_request_refreshes_last_activity_after_a_successful_operation(cmd):
+    key = Fernet.generate_key()
+    state = AgentState(username="alice", key=key, last_activity=1000.0)
+    request_ = {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"} if cmd == "ENCRYPT" else {"cmd": "DECRYPT", "token": Fernet(key).encrypt(b"test-only-pass-1").decode()}
+    new_state, response = handle_request(state, request_, now=1100.0)
+    assert response["ok"] is True
+    assert new_state == replace(state, last_activity=1100.0)

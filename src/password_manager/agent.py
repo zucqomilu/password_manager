@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -27,6 +27,11 @@ def expire(state: AgentState, now: float) -> AgentState:
     return AgentState() if state.key is not None and now - state.last_activity >= SESSION_TTL else state
 
 
+# Only a successful use of the key counts as activity; failed or locked requests never extend the session
+def touch(state: AgentState, response: dict, now: float) -> tuple[AgentState, dict]:
+    return (replace(state, last_activity=now) if response["ok"] else state), response
+
+
 # Pure core of the session agent: takes the current state, one request and the current time,
 # and returns the new state plus the response to send back. The key is never put in a response.
 def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
@@ -40,6 +45,6 @@ def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, 
     if request["cmd"] in ("ENCRYPT", "DECRYPT") and state.key is None:
         return state, {"ok": False, "error": "locked"}
     if request["cmd"] == "ENCRYPT":
-        return state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}
+        return touch(state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}, now)
     if request["cmd"] == "DECRYPT":
-        return state, decrypt_response(state.key, request["token"])
+        return touch(state, decrypt_response(state.key, request["token"]), now)
