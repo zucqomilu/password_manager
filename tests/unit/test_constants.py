@@ -68,3 +68,15 @@ def test_get_socket_path_uses_xdg_runtime_dir(monkeypatch):
     monkeypatch.delenv("PM_AGENT_SOCKET", raising=False)
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
     assert get_socket_path() == "/run/user/1000/password_manager/agent.sock"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("xdg_runtime_dir", [None, "", "relative/run"])
+def test_get_socket_path_falls_back_to_the_data_dir_without_an_absolute_xdg_runtime_dir(monkeypatch, xdg_runtime_dir):
+    monkeypatch.delenv("PM_AGENT_SOCKET", raising=False)
+    monkeypatch.setenv("PM_DATA_DIR", "/custom/pm")
+    if xdg_runtime_dir is None:
+        monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    else:
+        monkeypatch.setenv("XDG_RUNTIME_DIR", xdg_runtime_dir)
+    assert get_socket_path() == "/custom/pm/agent.sock"

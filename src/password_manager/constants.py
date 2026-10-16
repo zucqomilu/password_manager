@@ -21,9 +21,14 @@ def get_users():
 def get_log():
     return os.path.join(get_data_dir(), "vault.log")
 
-# Agent socket in the per-user runtime dir: owned by the user, 0700, on tmpfs and wiped at logout
+# Dir for the agent socket: the per-user runtime dir (owned by the user, 0700, on tmpfs and wiped at logout)
+# when it is absolute, else the 0700 data dir. Never a relative path, which would land in the cwd.
+def get_runtime_dir():
+    xdg_runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+    return os.path.join(xdg_runtime_dir, "password_manager") if os.path.isabs(xdg_runtime_dir) else get_data_dir()
+
 def get_socket_path():
-    return os.path.join(os.environ["XDG_RUNTIME_DIR"], "password_manager", "agent.sock")
+    return os.path.join(get_runtime_dir(), "agent.sock")
 
 # Keyring
 KEYRING_SERVICE = "password_manager"
