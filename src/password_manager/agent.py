@@ -44,8 +44,9 @@ def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, 
     # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit
     if request["cmd"] == "LOCK":
         return AgentState(), {"ok": True, "shutdown": True}
-    # Checked before any Fernet call, so a locked agent answers cleanly instead of failing on a missing key
-    if request["cmd"] in ("ENCRYPT", "DECRYPT") and state.key is None:
+    # Checked before any Fernet call or TTL arithmetic, so a locked agent answers cleanly instead of
+    # failing on a missing key, and never says which user was logged in
+    if request["cmd"] in ("ENCRYPT", "DECRYPT", "STATUS") and state.key is None:
         return state, {"ok": False, "error": "locked"}
     # Not passed through touch(): checking the status must never keep the key alive
     if request["cmd"] == "STATUS":

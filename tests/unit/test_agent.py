@@ -87,3 +87,8 @@ def test_handle_request_status_reports_the_user_and_remaining_ttl_without_the_ke
     assert handle_request(state, {"cmd": "STATUS"}, now=1100.0) == (
         state, {"ok": True, "username": "alice", "remaining_ttl": SESSION_TTL - 100.0},
     )
+
+
+@pytest.mark.unit
+def test_handle_request_status_reports_locked_when_no_key_is_held():
+    assert handle_request(AgentState(), {"cmd": "STATUS"}, now=1000.0) == (AgentState(), {"ok": False, "error": "locked"})
