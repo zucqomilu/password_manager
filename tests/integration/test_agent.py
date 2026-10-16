@@ -30,3 +30,18 @@ def test_create_listener_replaces_a_stale_socket_file_left_by_a_dead_agent(tmp_p
             client.connect(str(socket_path))
     finally:
         listener.close()
+
+
+@pytest.mark.integration
+def test_create_listener_leaves_a_live_agents_socket_in_place(tmp_path):
+    socket_path = tmp_path / "run" / "agent.sock"
+    listener = create_listener(str(socket_path))
+    try:
+        with pytest.raises(OSError, match="Address already in use"):
+            create_listener(str(socket_path))
+        # The running agent still answers on its own socket
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.connect(str(socket_path))
+            listener.accept()[0].close()
+    finally:
+        listener.close()
