@@ -92,3 +92,10 @@ def test_handle_request_status_reports_the_user_and_remaining_ttl_without_the_ke
 @pytest.mark.unit
 def test_handle_request_status_reports_locked_when_no_key_is_held():
     assert handle_request(AgentState(), {"cmd": "STATUS"}, now=1000.0) == (AgentState(), {"ok": False, "error": "locked"})
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cmd", ["FOO", "unlock", ""])
+def test_handle_request_rejects_unknown_commands(cmd):
+    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    assert handle_request(state, {"cmd": cmd}, now=1100.0) == (state, {"ok": False, "error": "unknown command"})

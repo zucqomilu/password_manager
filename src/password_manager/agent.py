@@ -55,3 +55,5 @@ def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, 
         return touch(state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}, now)
     if request["cmd"] == "DECRYPT":
         return touch(state, decrypt_response(state.key, request["token"]), now)
+    # Fixed error that never echoes the command back, and never extends the session
+    return state, {"ok": False, "error": "unknown command"}
