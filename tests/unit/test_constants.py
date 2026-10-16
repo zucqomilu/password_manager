@@ -80,3 +80,10 @@ def test_get_socket_path_falls_back_to_the_data_dir_without_an_absolute_xdg_runt
     else:
         monkeypatch.setenv("XDG_RUNTIME_DIR", xdg_runtime_dir)
     assert get_socket_path() == "/custom/pm/agent.sock"
+
+
+@pytest.mark.unit
+def test_get_socket_path_honors_pm_agent_socket_override(monkeypatch):
+    monkeypatch.setenv("PM_AGENT_SOCKET", "/custom/agent.sock")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
+    assert get_socket_path() == "/custom/agent.sock"

@@ -27,8 +27,9 @@ def get_runtime_dir():
     xdg_runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
     return os.path.join(xdg_runtime_dir, "password_manager") if os.path.isabs(xdg_runtime_dir) else get_data_dir()
 
+# PM_AGENT_SOCKET lets tests and manual runs against a data copy use their own agent, never the real one
 def get_socket_path():
-    return os.path.join(get_runtime_dir(), "agent.sock")
+    return os.environ.get("PM_AGENT_SOCKET") or os.path.join(get_runtime_dir(), "agent.sock")
 
 # Keyring
 KEYRING_SERVICE = "password_manager"
