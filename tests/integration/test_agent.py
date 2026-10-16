@@ -45,3 +45,20 @@ def test_create_listener_leaves_a_live_agents_socket_in_place(tmp_path):
             listener.accept()[0].close()
     finally:
         listener.close()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("make_path", [
+    lambda socket_path, target: socket_path.write_text("not a socket"),
+    lambda socket_path, target: socket_path.symlink_to(target),
+], ids=["regular file", "symlink"])
+def test_create_listener_never_removes_a_file_that_is_not_a_socket(tmp_path, make_path):
+    socket_path = tmp_path / "run" / "agent.sock"
+    socket_path.parent.mkdir()
+    target = tmp_path / "target.txt"
+    target.write_text("keep me")
+    make_path(socket_path, target)
+    with pytest.raises(OSError, match="Address already in use"):
+        create_listener(str(socket_path))
+    assert os.path.lexists(socket_path)
+    assert target.read_text() == "keep me"
