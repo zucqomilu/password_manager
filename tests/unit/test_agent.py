@@ -4,7 +4,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from password_manager.agent import AgentState, decode_message, encode_message, handle_request, remaining_ttl
-from password_manager.constants import SESSION_TTL
+from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
 
 @pytest.mark.unit
@@ -111,3 +111,10 @@ def test_remaining_ttl_returns_the_seconds_until_expiry():
 def test_encode_message_and_decode_message_round_trip_a_request():
     request_ = {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}
     assert decode_message(encode_message(request_)) == request_
+
+
+@pytest.mark.unit
+def test_decode_message_rejects_messages_over_the_size_limit():
+    # Valid JSON, so only the size can be the reason for the rejection
+    with pytest.raises(ValueError, match="too large"):
+        decode_message(encode_message({"cmd": "ENCRYPT", "plaintext": "x" * MAX_MESSAGE_SIZE}))

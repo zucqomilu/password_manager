@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from .constants import SESSION_TTL
+from .constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
 
 # What the agent holds between requests. All None means locked.
@@ -70,5 +70,8 @@ def encode_message(message: dict) -> bytes:
     return json.dumps(message).encode() + b"\n"
 
 
+# Size is checked before parsing, so an oversized payload is never parsed. Raises ValueError like malformed JSON does.
 def decode_message(data: bytes) -> dict:
+    if len(data) > MAX_MESSAGE_SIZE:
+        raise ValueError("message too large")
     return json.loads(data)

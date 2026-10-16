@@ -27,6 +27,9 @@ KEYRING_ACCOUNT = "session"
 
 SESSION_TTL = 15 * 60
 
+# Largest agent socket message in bytes; far above any password, login or Fernet token
+MAX_MESSAGE_SIZE = 64 * 1024
+
 # Argon2id costs for new v2 records (RFC 9106 low-memory profile); memory_cost is in KiB.
 # Each record stores its own copy, so raising these later never breaks existing users.
 ARGON2_PARAMS = {"time_cost": 3, "memory_cost": 64 * 1024, "parallelism": 4}
