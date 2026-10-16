@@ -1,6 +1,7 @@
 import json
 import os
 import socket
+import stat
 from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -79,11 +80,33 @@ def decode_message(data: bytes) -> dict:
     return json.loads(data)
 
 
+# A refused connect means nobody is listening; a successful one means an agent is running there
+def is_live_socket(path: str) -> bool:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+        try:
+            probe.connect(path)
+            return True
+        except ConnectionRefusedError:
+            return False
+
+
+# Only a socket file (lstat: a symlink is never followed) that no agent answers on is stale.
+# The S_ISSOCK check matters: connect() to a regular file is also refused, and that file must never be removed.
+def is_stale_socket(path: str) -> bool:
+    try:
+        return stat.S_ISSOCK(os.lstat(path).st_mode) and not is_live_socket(path)
+    except FileNotFoundError:
+        return False
+
+
 # The dir is forced to 0700 before bind, so no other user can reach the socket even before its own chmod to 0600.
 # chmod on a dir owned by someone else raises, so the agent never listens in a dir others control.
 def create_listener(path: str) -> socket.socket:
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     os.chmod(os.path.dirname(path), 0o700)
+    # A dead agent's leftover socket would make bind fail and block every login until removed by hand
+    if is_stale_socket(path):
+        os.unlink(path)
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(path)
     os.chmod(path, 0o600)
