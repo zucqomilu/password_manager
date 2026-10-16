@@ -73,3 +73,9 @@ def test_handle_request_refreshes_last_activity_after_a_successful_operation(cmd
     new_state, response = handle_request(state, request_, now=1100.0)
     assert response["ok"] is True
     assert new_state == replace(state, last_activity=1100.0)
+
+
+@pytest.mark.unit
+def test_handle_request_lock_clears_the_key_and_signals_shutdown():
+    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    assert handle_request(state, {"cmd": "LOCK"}, now=1001.0) == (AgentState(), {"ok": True, "shutdown": True})

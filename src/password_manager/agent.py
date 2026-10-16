@@ -41,6 +41,9 @@ def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentS
 def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
     if request["cmd"] == "UNLOCK":
         return AgentState(username=request["username"], key=request["key"].encode(), last_activity=now), {"ok": True}
+    # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit
+    if request["cmd"] == "LOCK":
+        return AgentState(), {"ok": True, "shutdown": True}
     # Checked before any Fernet call, so a locked agent answers cleanly instead of failing on a missing key
     if request["cmd"] in ("ENCRYPT", "DECRYPT") and state.key is None:
         return state, {"ok": False, "error": "locked"}
