@@ -1,4 +1,6 @@
 import json
+import os
+import socket
 from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -75,3 +77,15 @@ def decode_message(data: bytes) -> dict:
     if len(data) > MAX_MESSAGE_SIZE:
         raise ValueError("message too large")
     return json.loads(data)
+
+
+# The dir is forced to 0700 before bind, so no other user can reach the socket even before its own chmod to 0600.
+# chmod on a dir owned by someone else raises, so the agent never listens in a dir others control.
+def create_listener(path: str) -> socket.socket:
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    os.chmod(os.path.dirname(path), 0o700)
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(path)
+    os.chmod(path, 0o600)
+    listener.listen()
+    return listener
