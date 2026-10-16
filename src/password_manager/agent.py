@@ -27,6 +27,11 @@ def expire(state: AgentState, now: float) -> AgentState:
     return AgentState() if state.key is not None and now - state.last_activity >= SESSION_TTL else state
 
 
+# Seconds until the held key expires; the server loop uses it as its timeout so an idle agent exits on time
+def remaining_ttl(state: AgentState, now: float) -> float:
+    return SESSION_TTL - (now - state.last_activity)
+
+
 # Only a successful use of the key counts as activity; failed or locked requests never extend the session
 def touch(state: AgentState, response: dict, now: float) -> tuple[AgentState, dict]:
     return (replace(state, last_activity=now) if response["ok"] else state), response
@@ -50,7 +55,7 @@ def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, 
         return state, {"ok": False, "error": "locked"}
     # Not passed through touch(): checking the status must never keep the key alive
     if request["cmd"] == "STATUS":
-        return state, {"ok": True, "username": state.username, "remaining_ttl": SESSION_TTL - (now - state.last_activity)}
+        return state, {"ok": True, "username": state.username, "remaining_ttl": remaining_ttl(state, now)}
     if request["cmd"] == "ENCRYPT":
         return touch(state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}, now)
     if request["cmd"] == "DECRYPT":
