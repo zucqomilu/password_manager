@@ -21,6 +21,10 @@ def get_users():
 def get_log():
     return os.path.join(get_data_dir(), "vault.log")
 
+# Agent socket in the per-user runtime dir: owned by the user, 0700, on tmpfs and wiped at logout
+def get_socket_path():
+    return os.path.join(os.environ["XDG_RUNTIME_DIR"], "password_manager", "agent.sock")
+
 # Keyring
 KEYRING_SERVICE = "password_manager"
 KEYRING_ACCOUNT = "session"
