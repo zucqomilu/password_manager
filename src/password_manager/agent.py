@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -62,3 +63,12 @@ def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, 
         return touch(state, decrypt_response(state.key, request["token"]), now)
     # Fixed error that never echoes the command back, and never extends the session
     return state, {"ok": False, "error": "unknown command"}
+
+
+# Wire format: one UTF-8 JSON object per line. Plain JSON, never pickle, so decoding a message can never run code.
+def encode_message(message: dict) -> bytes:
+    return json.dumps(message).encode() + b"\n"
+
+
+def decode_message(data: bytes) -> dict:
+    return json.loads(data)

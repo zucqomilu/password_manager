@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 from cryptography.fernet import Fernet
 
-from password_manager.agent import AgentState, handle_request, remaining_ttl
+from password_manager.agent import AgentState, decode_message, encode_message, handle_request, remaining_ttl
 from password_manager.constants import SESSION_TTL
 
 
@@ -105,3 +105,9 @@ def test_handle_request_rejects_unknown_commands(cmd):
 def test_remaining_ttl_returns_the_seconds_until_expiry():
     state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
     assert remaining_ttl(state, now=1100.0) == SESSION_TTL - 100.0
+
+
+@pytest.mark.unit
+def test_encode_message_and_decode_message_round_trip_a_request():
+    request_ = {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}
+    assert decode_message(encode_message(request_)) == request_
