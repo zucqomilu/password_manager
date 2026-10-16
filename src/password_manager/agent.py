@@ -47,6 +47,9 @@ def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, 
     # Checked before any Fernet call, so a locked agent answers cleanly instead of failing on a missing key
     if request["cmd"] in ("ENCRYPT", "DECRYPT") and state.key is None:
         return state, {"ok": False, "error": "locked"}
+    # Not passed through touch(): checking the status must never keep the key alive
+    if request["cmd"] == "STATUS":
+        return state, {"ok": True, "username": state.username, "remaining_ttl": SESSION_TTL - (now - state.last_activity)}
     if request["cmd"] == "ENCRYPT":
         return touch(state, {"ok": True, "token": Fernet(state.key).encrypt(request["plaintext"].encode()).decode()}, now)
     if request["cmd"] == "DECRYPT":

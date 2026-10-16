@@ -79,3 +79,11 @@ def test_handle_request_refreshes_last_activity_after_a_successful_operation(cmd
 def test_handle_request_lock_clears_the_key_and_signals_shutdown():
     state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
     assert handle_request(state, {"cmd": "LOCK"}, now=1001.0) == (AgentState(), {"ok": True, "shutdown": True})
+
+
+@pytest.mark.unit
+def test_handle_request_status_reports_the_user_and_remaining_ttl_without_the_key():
+    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    assert handle_request(state, {"cmd": "STATUS"}, now=1100.0) == (
+        state, {"ok": True, "username": "alice", "remaining_ttl": SESSION_TTL - 100.0},
+    )
