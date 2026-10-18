@@ -95,6 +95,16 @@ def respond(conn: socket.socket, result: tuple[AgentState, dict]) -> tuple[Agent
     return result
 
 
+# A request that is not JSON, not UTF-8, too large or the wrong shape gets one fixed error and never crashes the
+# agent. The exception is never sent or logged: a JSONDecodeError carries the raw input, which can hold a key or a
+# password. expire() still runs, so garbage requests cannot keep an expired key alive.
+def handle_data(state: AgentState, data: bytes, now: float) -> tuple[AgentState, dict]:
+    try:
+        return handle_request(state, decode_message(data), now)
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return expire(state, now), {"ok": False, "error": "malformed request"}
+
+
 # One request per connection, read through the size-limited read_message(). Only handle_request()'s response
 # is sent back, and that core never puts the key in a response.
 # The peer is checked before a single byte is read: an unauthorized peer gets no reply, only a closed connection,
@@ -103,7 +113,7 @@ def serve_connection(state: AgentState, conn: socket.socket, now: float) -> tupl
     if not is_authorized_peer(conn):
         conn.shutdown(socket.SHUT_RDWR)
         return state, {"ok": False, "error": "unauthorized"}
-    return respond(conn, handle_request(state, decode_message(read_message(conn)), now))
+    return respond(conn, handle_data(state, read_message(conn), now))
 
 
 # The kernel records the peer's struct ucred (int pid, unsigned uid, unsigned gid) at connect time, so a client cannot fake it.
