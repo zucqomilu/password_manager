@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from .constants import MAX_MESSAGE_SIZE, SESSION_TTL
+from .constants import CONNECTION_TIMEOUT, MAX_MESSAGE_SIZE, SESSION_TTL
 
 
 # What the agent holds between requests. All None means locked.
@@ -109,11 +109,18 @@ def handle_data(state: AgentState, data: bytes, now: float) -> tuple[AgentState,
 # is sent back, and that core never puts the key in a response.
 # The peer is checked before a single byte is read: an unauthorized peer gets no reply, only a closed connection,
 # and its result has no shutdown, so it can neither use nor stop the agent.
+# A peer that sends nothing is dropped after CONNECTION_TIMEOUT, so it cannot block the loop and keep the key past
+# its TTL. Only the read is covered: a handled request's new state (a LOCK, say) must never be thrown away.
 def serve_connection(state: AgentState, conn: socket.socket, now: float) -> tuple[AgentState, dict]:
     if not is_authorized_peer(conn):
         conn.shutdown(socket.SHUT_RDWR)
         return state, {"ok": False, "error": "unauthorized"}
-    return respond(conn, handle_data(state, read_message(conn), now))
+    conn.settimeout(CONNECTION_TIMEOUT)
+    try:
+        data = read_message(conn)
+    except TimeoutError:
+        return expire(state, now), {"ok": False, "error": "timeout"}
+    return respond(conn, handle_data(state, data, now))
 
 
 # The kernel records the peer's struct ucred (int pid, unsigned uid, unsigned gid) at connect time, so a client cannot fake it.

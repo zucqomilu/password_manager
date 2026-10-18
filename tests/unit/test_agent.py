@@ -1,5 +1,6 @@
 import os
 import socket
+import time
 from dataclasses import replace
 
 import pytest
@@ -217,3 +218,16 @@ def test_serve_connection_answers_a_malformed_request_with_an_error_and_keeps_th
         client.sendall(data)
         assert serve_connection(state, server, now=1001.0) == (state, {"ok": False, "error": "malformed request"})
         assert decode_message(read_message(client)) == {"ok": False, "error": "malformed request"}
+
+
+@pytest.mark.unit
+def test_serve_connection_gives_up_on_a_peer_that_sends_nothing_within_a_short_timeout(monkeypatch):
+    monkeypatch.setattr("password_manager.agent.CONNECTION_TIMEOUT", 0.1)
+    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    server, client = socket.socketpair()
+    with server, client:
+        # Only a guard against hanging the suite; the elapsed check proves CONNECTION_TIMEOUT ended the wait
+        server.settimeout(5)
+        started = time.monotonic()
+        assert serve_connection(state, server, now=1001.0) == (state, {"ok": False, "error": "timeout"})
+        assert time.monotonic() - started < 1
