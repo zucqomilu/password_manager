@@ -152,3 +152,13 @@ def test_read_message_reads_one_newline_terminated_message_from_a_connection():
         server.settimeout(1)
         client.sendall(message)
         assert read_message(server) == message
+
+
+@pytest.mark.unit
+def test_read_message_stops_reading_after_max_message_size_plus_one_bytes():
+    server, client = socket.socketpair()
+    with server, client:
+        # No newline and the client stays open: only the size limit can end this read
+        server.settimeout(1)
+        client.sendall(b"x" * (MAX_MESSAGE_SIZE + 100))
+        assert len(read_message(server)) == MAX_MESSAGE_SIZE + 1
