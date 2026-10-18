@@ -175,3 +175,22 @@ def test_serve_connection_answers_a_request_with_handle_requests_response():
         client.sendall(encode_message(request_))
         assert serve_connection(AgentState(), server, now=1000.0) == handle_request(AgentState(), request_, now=1000.0)
         assert decode_message(read_message(client)) == {"ok": True}
+
+
+def fail_if_called(*args):
+    raise AssertionError("must not be called")
+
+
+@pytest.mark.unit
+def test_serve_connection_closes_an_unauthorized_peers_connection_without_reading_its_request(monkeypatch):
+    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    other_uid = os.getuid() + 1
+    server, client = socket.socketpair()
+    with server, client:
+        client.settimeout(1)
+        client.sendall(encode_message({"cmd": "LOCK"}))
+        monkeypatch.setattr("password_manager.agent.os.getuid", lambda: other_uid)
+        monkeypatch.setattr("password_manager.agent.read_message", fail_if_called)
+        assert serve_connection(state, server, now=1001.0) == (state, {"ok": False, "error": "unauthorized"})
+        # The peer gets no reply at all, just the closed connection
+        assert client.recv(1) == b""

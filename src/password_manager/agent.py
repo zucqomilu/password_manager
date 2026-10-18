@@ -97,7 +97,12 @@ def respond(conn: socket.socket, result: tuple[AgentState, dict]) -> tuple[Agent
 
 # One request per connection, read through the size-limited read_message(). Only handle_request()'s response
 # is sent back, and that core never puts the key in a response.
+# The peer is checked before a single byte is read: an unauthorized peer gets no reply, only a closed connection,
+# and its result has no shutdown, so it can neither use nor stop the agent.
 def serve_connection(state: AgentState, conn: socket.socket, now: float) -> tuple[AgentState, dict]:
+    if not is_authorized_peer(conn):
+        conn.shutdown(socket.SHUT_RDWR)
+        return state, {"ok": False, "error": "unauthorized"}
     return respond(conn, handle_request(state, decode_message(read_message(conn)), now))
 
 
