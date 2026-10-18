@@ -74,6 +74,14 @@ def encode_message(message: dict) -> bytes:
     return json.dumps(message).encode() + b"\n"
 
 
+# One message per connection: stops at the first newline and never returns more than MAX_MESSAGE_SIZE + 1 bytes,
+# however much the peer sends; the extra byte lets decode_message reject an oversized message. Anything after the
+# newline is dropped with the stream, so no second request can hide behind the first. The socket itself stays open.
+def read_message(conn: socket.socket) -> bytes:
+    with conn.makefile("rb") as stream:
+        return stream.readline(MAX_MESSAGE_SIZE + 1)
+
+
 # Size is checked before parsing, so an oversized payload is never parsed. Raises ValueError like malformed JSON does.
 def decode_message(data: bytes) -> dict:
     if len(data) > MAX_MESSAGE_SIZE:

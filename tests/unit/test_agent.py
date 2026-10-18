@@ -5,7 +5,9 @@ from dataclasses import replace
 import pytest
 from cryptography.fernet import Fernet
 
-from password_manager.agent import AgentState, decode_message, encode_message, handle_request, is_authorized_peer, remaining_ttl
+from password_manager.agent import (
+    AgentState, decode_message, encode_message, handle_request, is_authorized_peer, read_message, remaining_ttl,
+)
 from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
 
@@ -138,3 +140,15 @@ def test_is_authorized_peer_rejects_a_peer_with_a_different_uid(monkeypatch):
     with server, client:
         monkeypatch.setattr("password_manager.agent.os.getuid", lambda: other_uid)
         assert is_authorized_peer(server) is False
+
+
+@pytest.mark.unit
+def test_read_message_reads_one_newline_terminated_message_from_a_connection():
+    message = encode_message({"cmd": "STATUS"})
+    server, client = socket.socketpair()
+    with server, client:
+        # The client stays open, so this only returns if read_message stops at the newline; the timeout
+        # makes a version that waits for EOF fail instead of hanging the suite
+        server.settimeout(1)
+        client.sendall(message)
+        assert read_message(server) == message
