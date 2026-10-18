@@ -231,3 +231,15 @@ def test_serve_connection_gives_up_on_a_peer_that_sends_nothing_within_a_short_t
         started = time.monotonic()
         assert serve_connection(state, server, now=1001.0) == (state, {"ok": False, "error": "timeout"})
         assert time.monotonic() - started < 1
+
+
+@pytest.mark.unit
+def test_serve_connection_keeps_the_new_state_when_the_reply_cannot_be_sent():
+    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    server, client = socket.socketpair()
+    with server, client:
+        server.settimeout(1)
+        # The client logs out and goes away before reading the reply, so sending it fails
+        client.sendall(encode_message({"cmd": "LOCK"}))
+        client.close()
+        assert serve_connection(state, server, now=1001.0) == (AgentState(), {"ok": True, "shutdown": True})

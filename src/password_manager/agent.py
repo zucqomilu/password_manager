@@ -89,9 +89,14 @@ def decode_message(data: bytes) -> dict:
     return json.loads(data)
 
 
-# Sends the response half of handle_request()'s (state, response) result and passes the result on
+# Sends the response half of handle_request()'s (state, response) result and passes the result on.
+# A handled request counts whether or not the client hears the answer: if the send fails, a LOCK must still drop
+# the key. The failure is not logged, because the response can hold a decrypted password.
 def respond(conn: socket.socket, result: tuple[AgentState, dict]) -> tuple[AgentState, dict]:
-    conn.sendall(encode_message(result[1]))
+    try:
+        conn.sendall(encode_message(result[1]))
+    except OSError:
+        pass
     return result
 
 
