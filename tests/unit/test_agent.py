@@ -1,3 +1,4 @@
+import os
 import socket
 from dataclasses import replace
 
@@ -127,3 +128,13 @@ def test_is_authorized_peer_accepts_a_peer_with_the_same_uid():
     server, client = socket.socketpair()
     with server, client:
         assert is_authorized_peer(server) is True
+
+
+@pytest.mark.unit
+def test_is_authorized_peer_rejects_a_peer_with_a_different_uid(monkeypatch):
+    # A real second user would need root, so the agent pretends to run as another uid instead
+    other_uid = os.getuid() + 1
+    server, client = socket.socketpair()
+    with server, client:
+        monkeypatch.setattr("password_manager.agent.os.getuid", lambda: other_uid)
+        assert is_authorized_peer(server) is False
