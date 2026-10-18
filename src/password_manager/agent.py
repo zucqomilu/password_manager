@@ -89,6 +89,18 @@ def decode_message(data: bytes) -> dict:
     return json.loads(data)
 
 
+# Sends the response half of handle_request()'s (state, response) result and passes the result on
+def respond(conn: socket.socket, result: tuple[AgentState, dict]) -> tuple[AgentState, dict]:
+    conn.sendall(encode_message(result[1]))
+    return result
+
+
+# One request per connection, read through the size-limited read_message(). Only handle_request()'s response
+# is sent back, and that core never puts the key in a response.
+def serve_connection(state: AgentState, conn: socket.socket, now: float) -> tuple[AgentState, dict]:
+    return respond(conn, handle_request(state, decode_message(read_message(conn)), now))
+
+
 # The kernel records the peer's struct ucred (int pid, unsigned uid, unsigned gid) at connect time, so a client cannot fake it.
 # Only processes running as the same user may talk to the agent, the same rule as ssh-agent.
 def is_authorized_peer(conn: socket.socket) -> bool:

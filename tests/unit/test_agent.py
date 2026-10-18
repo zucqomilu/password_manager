@@ -7,6 +7,7 @@ from cryptography.fernet import Fernet
 
 from password_manager.agent import (
     AgentState, decode_message, encode_message, handle_request, is_authorized_peer, read_message, remaining_ttl,
+    serve_connection,
 )
 from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
@@ -162,3 +163,15 @@ def test_read_message_stops_reading_after_max_message_size_plus_one_bytes():
         server.settimeout(1)
         client.sendall(b"x" * (MAX_MESSAGE_SIZE + 100))
         assert len(read_message(server)) == MAX_MESSAGE_SIZE + 1
+
+
+@pytest.mark.unit
+def test_serve_connection_answers_a_request_with_handle_requests_response():
+    request_ = {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}
+    server, client = socket.socketpair()
+    with server, client:
+        server.settimeout(1)
+        client.settimeout(1)
+        client.sendall(encode_message(request_))
+        assert serve_connection(AgentState(), server, now=1000.0) == handle_request(AgentState(), request_, now=1000.0)
+        assert decode_message(read_message(client)) == {"ok": True}
