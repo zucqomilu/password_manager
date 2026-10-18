@@ -1,9 +1,10 @@
+import socket
 from dataclasses import replace
 
 import pytest
 from cryptography.fernet import Fernet
 
-from password_manager.agent import AgentState, decode_message, encode_message, handle_request, remaining_ttl
+from password_manager.agent import AgentState, decode_message, encode_message, handle_request, is_authorized_peer, remaining_ttl
 from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
 
@@ -118,3 +119,11 @@ def test_decode_message_rejects_messages_over_the_size_limit():
     # Valid JSON, so only the size can be the reason for the rejection
     with pytest.raises(ValueError, match="too large"):
         decode_message(encode_message({"cmd": "ENCRYPT", "plaintext": "x" * MAX_MESSAGE_SIZE}))
+
+
+@pytest.mark.unit
+def test_is_authorized_peer_accepts_a_peer_with_the_same_uid():
+    # socketpair() gives real kernel peer credentials without touching the filesystem
+    server, client = socket.socketpair()
+    with server, client:
+        assert is_authorized_peer(server) is True

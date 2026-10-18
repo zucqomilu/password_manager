@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import stat
+import struct
 from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -78,6 +79,12 @@ def decode_message(data: bytes) -> dict:
     if len(data) > MAX_MESSAGE_SIZE:
         raise ValueError("message too large")
     return json.loads(data)
+
+
+# The kernel records the peer's struct ucred (int pid, unsigned uid, unsigned gid) at connect time, so a client cannot fake it.
+# Only processes running as the same user may talk to the agent, the same rule as ssh-agent.
+def is_authorized_peer(conn: socket.socket) -> bool:
+    return struct.unpack("iII", conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("iII")))[1] == os.getuid()
 
 
 # A refused connect means nobody is listening; a successful one means an agent is running there
