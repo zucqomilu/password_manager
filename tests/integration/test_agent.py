@@ -188,3 +188,13 @@ def test_start_agent_reuses_the_agent_another_pm_started_at_the_same_moment(tmp_
         assert send_request(socket_path, {"cmd": "STATUS"})["username"] == "alice"
     finally:
         send_request(socket_path, {"cmd": "LOCK"})
+
+
+@pytest.mark.integration
+def test_start_agent_raises_when_the_socket_path_is_taken_by_something_that_is_not_an_agent(tmp_path):
+    socket_path = tmp_path / "run" / "agent.sock"
+    socket_path.parent.mkdir()
+    socket_path.write_text("not a socket")
+    with pytest.raises(OSError, match="Address already in use"):
+        start_agent(str(socket_path))
+    assert socket_path.read_text() == "not a socket"
