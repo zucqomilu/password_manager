@@ -173,3 +173,18 @@ def test_start_agent_reuses_an_already_running_agent(tmp_path):
         assert send_request(socket_path, {"cmd": "STATUS"})["username"] == "alice"
     finally:
         send_request(socket_path, {"cmd": "LOCK"})
+
+
+@pytest.mark.integration
+def test_start_agent_reuses_the_agent_another_pm_started_at_the_same_moment(tmp_path, monkeypatch):
+    socket_path = str(tmp_path / "run" / "agent.sock")
+    start_agent(socket_path)
+    try:
+        assert send_request(socket_path, {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}) == {"ok": True}
+        # The first probe misses, as it would for a pm that looked just before the other pm's agent was listening
+        probes = iter([lambda path, request: None])
+        monkeypatch.setattr("password_manager.agent.send_request", lambda path, request: next(probes, send_request)(path, request))
+        assert start_agent(socket_path) is None
+        assert send_request(socket_path, {"cmd": "STATUS"})["username"] == "alice"
+    finally:
+        send_request(socket_path, {"cmd": "LOCK"})

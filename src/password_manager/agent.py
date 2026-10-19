@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import socket
@@ -228,7 +229,15 @@ def send_request(path: str, request: dict) -> dict | None:
 def start_agent(path: str) -> int | None:
     if send_request(path, {"cmd": "STATUS"}) is not None:
         return None
-    with create_listener(path) as listener:
+    # Another pm may have started an agent since the probe: create_listener() then refuses to touch its socket, and
+    # if that agent answers now it is reused. Any other error, or EADDRINUSE with nobody answering, still raises.
+    try:
+        listener = create_listener(path)
+    except OSError as error:
+        if error.errno == errno.EADDRINUSE and send_request(path, {"cmd": "STATUS"}) is not None:
+            return None
+        raise
+    with listener:
         return subprocess.Popen(
             [sys.executable, "-m", "password_manager.agent", str(listener.fileno())],
             pass_fds=(listener.fileno(),), start_new_session=True, cwd="/",
