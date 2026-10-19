@@ -3,6 +3,8 @@ import os
 import socket
 import stat
 import struct
+import subprocess
+import sys
 import time
 from dataclasses import dataclass, field, replace
 
@@ -212,3 +214,25 @@ def send_request(path: str, request: dict) -> dict | None:
         client.settimeout(CONNECTION_TIMEOUT)
         client.sendall(encode_message(request))
         return decode_message(read_message(client))
+
+
+# The listener is created here, in the parent, and handed to the child as its only inherited fd: the socket is bound
+# with its 0700/0600 permissions and listening before the child exists, so pm can send UNLOCK at once, with no wait
+# and no window for another process to take the path. The key never goes through argv or the environment (both are
+# readable via /proc); the child starts locked and gets it over the socket. A new session keeps closing the terminal
+# or Ctrl-C from killing it, cwd="/" keeps it from holding a directory busy, and DEVNULL keeps it from ever writing
+# to the terminal.
+# Returns the daemon's pid; SO_PEERCRED cannot tell it, because the kernel records whoever called listen(), the parent.
+def start_agent(path: str) -> int:
+    with create_listener(path) as listener:
+        return subprocess.Popen(
+            [sys.executable, "-m", "password_manager.agent", str(listener.fileno())],
+            pass_fds=(listener.fileno(),), start_new_session=True, cwd="/",
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ).pid
+
+
+# Entry point of the spawned daemon: rebuild the listener from the fd start_agent() passed down.
+# It only runs in the child, which coverage does not measure; the start_agent() integration tests exercise it.
+if __name__ == "__main__":  # pragma: no cover
+    run_agent(socket.socket(fileno=int(sys.argv[1])))

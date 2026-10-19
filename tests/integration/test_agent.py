@@ -8,7 +8,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from password_manager.agent import (
-    create_listener, decode_message, encode_message, read_message, run_agent, send_request,
+    create_listener, decode_message, encode_message, read_message, run_agent, send_request, start_agent,
 )
 
 
@@ -146,3 +146,17 @@ def test_send_request_returns_the_agents_response(tmp_path):
         # Stop the agent through its own socket, so no thread is left behind even when an assert fails
         ask(socket_path, {"cmd": "LOCK"})
         agent.join(timeout=5)
+
+
+@pytest.mark.integration
+def test_start_agent_spawns_a_detached_daemon_when_no_agent_is_reachable(tmp_path):
+    socket_path = str(tmp_path / "run" / "agent.sock")
+    pid = start_agent(socket_path)
+    try:
+        # Answers straight away, with no polling, and holds no key until UNLOCK
+        assert send_request(socket_path, {"cmd": "STATUS"}) == {"ok": False, "error": "locked"}
+        # A separate process that leads its own session, so closing the terminal does not take it down
+        assert pid != os.getpid()
+        assert os.getsid(pid) == pid
+    finally:
+        send_request(socket_path, {"cmd": "LOCK"})
