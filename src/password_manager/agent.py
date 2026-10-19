@@ -173,11 +173,18 @@ def create_listener(path: str) -> socket.socket:
 # response signals shutdown. A while loop that rebinds result, against the no-reassignment convention on purpose:
 # recursion (one call per request) would hit Python's recursion limit after about 1000 requests and kill the session.
 # The finally removes the socket even if something raises, so a crashed agent never leaves a stale socket behind.
+# With no connection for SESSION_TTL the agent exits, so one spawned by a login that never sent UNLOCK does not
+# linger forever. Only accept() is covered: serve_connection() handles its own timeouts.
 def run_agent(listener: socket.socket) -> None:
     try:
         result = (AgentState(), {})
         while not result[1].get("shutdown"):
-            with listener.accept()[0] as conn:
+            listener.settimeout(SESSION_TTL)
+            try:
+                conn = listener.accept()[0]
+            except TimeoutError:
+                return
+            with conn:
                 result = serve_connection(result[0], conn, time.time())
     finally:
         os.unlink(listener.getsockname())

@@ -88,3 +88,15 @@ def test_run_agent_answers_requests_until_lock_then_removes_its_socket_and_retur
     agent.join(timeout=5)
     assert not agent.is_alive()
     assert not os.path.lexists(socket_path)
+
+
+@pytest.mark.integration
+def test_run_agent_exits_when_no_unlock_arrives_within_session_ttl(tmp_path, monkeypatch):
+    # An agent spawned by a login that then failed must not wait forever for a key that never comes
+    monkeypatch.setattr("password_manager.agent.SESSION_TTL", 0.2)
+    socket_path = tmp_path / "run" / "agent.sock"
+    agent = threading.Thread(target=run_agent, args=(create_listener(str(socket_path)),), daemon=True)
+    agent.start()
+    agent.join(timeout=5)
+    assert not agent.is_alive()
+    assert not os.path.lexists(socket_path)
