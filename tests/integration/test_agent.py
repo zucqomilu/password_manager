@@ -1,10 +1,21 @@
 import os
 import socket
 import stat
+import threading
 
 import pytest
+from cryptography.fernet import Fernet
 
-from password_manager.agent import create_listener
+from password_manager.agent import create_listener, decode_message, encode_message, read_message, run_agent
+
+
+# One request over a fresh connection, the way pm will talk to the agent
+def ask(socket_path, request_):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(5)
+        client.connect(str(socket_path))
+        client.sendall(encode_message(request_))
+        return decode_message(read_message(client))
 
 
 @pytest.mark.integration
@@ -62,3 +73,18 @@ def test_create_listener_never_removes_a_file_that_is_not_a_socket(tmp_path, mak
         create_listener(str(socket_path))
     assert os.path.lexists(socket_path)
     assert target.read_text() == "keep me"
+
+
+@pytest.mark.integration
+def test_run_agent_answers_requests_until_lock_then_removes_its_socket_and_returns(tmp_path):
+    socket_path = tmp_path / "run" / "agent.sock"
+    # daemon=True so a run_agent that never returns cannot hang the suite
+    agent = threading.Thread(target=run_agent, args=(create_listener(str(socket_path)),), daemon=True)
+    agent.start()
+    assert ask(socket_path, {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}) == {"ok": True}
+    token = ask(socket_path, {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"})["token"]
+    assert ask(socket_path, {"cmd": "DECRYPT", "token": token}) == {"ok": True, "plaintext": "test-only-pass-1"}
+    assert ask(socket_path, {"cmd": "LOCK"}) == {"ok": True, "shutdown": True}
+    agent.join(timeout=5)
+    assert not agent.is_alive()
+    assert not os.path.lexists(socket_path)

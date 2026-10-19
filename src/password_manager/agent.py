@@ -3,6 +3,7 @@ import os
 import socket
 import stat
 import struct
+import time
 from dataclasses import dataclass, field, replace
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -166,3 +167,18 @@ def create_listener(path: str) -> socket.socket:
     os.chmod(path, 0o600)
     listener.listen()
     return listener
+
+
+# The agent's accept loop: one connection at a time, the state carried from each request to the next, until a
+# response signals shutdown. A while loop that rebinds result, against the no-reassignment convention on purpose:
+# recursion (one call per request) would hit Python's recursion limit after about 1000 requests and kill the session.
+# The finally removes the socket even if something raises, so a crashed agent never leaves a stale socket behind.
+def run_agent(listener: socket.socket) -> None:
+    try:
+        result = (AgentState(), {})
+        while not result[1].get("shutdown"):
+            with listener.accept()[0] as conn:
+                result = serve_connection(result[0], conn, time.time())
+    finally:
+        os.unlink(listener.getsockname())
+        listener.close()
