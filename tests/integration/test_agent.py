@@ -132,3 +132,17 @@ def test_send_request_returns_none_when_no_agent_is_listening(tmp_path, leave_st
         # Closed without unlinking, like an agent killed with kill -9
         create_listener(str(socket_path)).close()
     assert send_request(str(socket_path), {"cmd": "STATUS"}) is None
+
+
+@pytest.mark.integration
+def test_send_request_returns_the_agents_response(tmp_path):
+    socket_path = tmp_path / "run" / "agent.sock"
+    agent = threading.Thread(target=run_agent, args=(create_listener(str(socket_path)),), daemon=True)
+    agent.start()
+    try:
+        assert send_request(str(socket_path), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}) == {"ok": True}
+        assert send_request(str(socket_path), {"cmd": "STATUS"})["username"] == "alice"
+    finally:
+        # Stop the agent through its own socket, so no thread is left behind even when an assert fails
+        ask(socket_path, {"cmd": "LOCK"})
+        agent.join(timeout=5)
