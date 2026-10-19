@@ -160,3 +160,16 @@ def test_start_agent_spawns_a_detached_daemon_when_no_agent_is_reachable(tmp_pat
         assert os.getsid(pid) == pid
     finally:
         send_request(socket_path, {"cmd": "LOCK"})
+
+
+@pytest.mark.integration
+def test_start_agent_reuses_an_already_running_agent(tmp_path):
+    socket_path = str(tmp_path / "run" / "agent.sock")
+    start_agent(socket_path)
+    try:
+        assert send_request(socket_path, {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}) == {"ok": True}
+        assert start_agent(socket_path) is None
+        # Still the same agent, still holding the session: a second login must not replace it or drop its key
+        assert send_request(socket_path, {"cmd": "STATUS"})["username"] == "alice"
+    finally:
+        send_request(socket_path, {"cmd": "LOCK"})

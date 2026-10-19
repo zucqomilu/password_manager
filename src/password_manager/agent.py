@@ -223,7 +223,11 @@ def send_request(path: str, request: dict) -> dict | None:
 # or Ctrl-C from killing it, cwd="/" keeps it from holding a directory busy, and DEVNULL keeps it from ever writing
 # to the terminal.
 # Returns the daemon's pid; SO_PEERCRED cannot tell it, because the kernel records whoever called listen(), the parent.
-def start_agent(path: str) -> int:
+# An agent that already answers, locked or not, is reused (None): it is never replaced or killed here, and its key
+# only changes through save_session()'s UNLOCK. STATUS is the probe because it never refreshes the session.
+def start_agent(path: str) -> int | None:
+    if send_request(path, {"cmd": "STATUS"}) is not None:
+        return None
     with create_listener(path) as listener:
         return subprocess.Popen(
             [sys.executable, "-m", "password_manager.agent", str(listener.fileno())],
