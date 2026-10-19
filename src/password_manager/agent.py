@@ -197,3 +197,14 @@ def run_agent(listener: socket.socket) -> None:
     finally:
         os.unlink(listener.getsockname())
         listener.close()
+
+
+# The client side, used by session.py. None means no agent is reachable: no socket file (never started, or exited
+# cleanly) or a stale one (a dead agent). pm treats that as logged out and asks for login, never as a crash.
+# Any other error, such as PermissionError on a socket owned by someone else, still raises.
+def send_request(path: str, request: dict) -> dict | None:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        try:
+            client.connect(path)
+        except (FileNotFoundError, ConnectionRefusedError):
+            return None

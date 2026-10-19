@@ -7,7 +7,9 @@ import time
 import pytest
 from cryptography.fernet import Fernet
 
-from password_manager.agent import create_listener, decode_message, encode_message, read_message, run_agent
+from password_manager.agent import (
+    create_listener, decode_message, encode_message, read_message, run_agent, send_request,
+)
 
 
 # One request over a fresh connection, the way pm will talk to the agent
@@ -120,3 +122,13 @@ def test_run_agent_exits_at_the_ttl_even_while_requests_that_do_not_refresh_the_
     agent.join(timeout=0.5)
     assert not agent.is_alive()
     assert not os.path.lexists(socket_path)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("leave_stale_socket", [False, True], ids=["no socket file", "stale socket file"])
+def test_send_request_returns_none_when_no_agent_is_listening(tmp_path, leave_stale_socket):
+    socket_path = tmp_path / "run" / "agent.sock"
+    if leave_stale_socket:
+        # Closed without unlinking, like an agent killed with kill -9
+        create_listener(str(socket_path)).close()
+    assert send_request(str(socket_path), {"cmd": "STATUS"}) is None
