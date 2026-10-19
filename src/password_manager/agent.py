@@ -169,20 +169,28 @@ def create_listener(path: str) -> socket.socket:
     return listener
 
 
+# How long the agent waits for the next connection before exiting. With a key held, only until that key expires:
+# a fresh full TTL after every connection would let STATUS checks or stray connections keep the key in memory
+# forever. Floored at 0 because settimeout() rejects negative values. Locked, it waits SESSION_TTL for an UNLOCK,
+# so an agent spawned by a login that never sent one does not linger forever.
+def accept_timeout(state: AgentState, now: float) -> float:
+    return max(0.0, remaining_ttl(state, now)) if state.key is not None else SESSION_TTL
+
+
 # The agent's accept loop: one connection at a time, the state carried from each request to the next, until a
 # response signals shutdown. A while loop that rebinds result, against the no-reassignment convention on purpose:
 # recursion (one call per request) would hit Python's recursion limit after about 1000 requests and kill the session.
 # The finally removes the socket even if something raises, so a crashed agent never leaves a stale socket behind.
-# With no connection for SESSION_TTL the agent exits, so one spawned by a login that never sent UNLOCK does not
-# linger forever. Only accept() is covered: serve_connection() handles its own timeouts.
+# Only accept() is covered by the timeout handling: serve_connection() handles its own timeouts.
 def run_agent(listener: socket.socket) -> None:
     try:
         result = (AgentState(), {})
         while not result[1].get("shutdown"):
-            listener.settimeout(SESSION_TTL)
+            listener.settimeout(accept_timeout(result[0], time.time()))
             try:
                 conn = listener.accept()[0]
-            except TimeoutError:
+            # A zero timeout makes the socket non-blocking, so an expired key ends the wait with BlockingIOError
+            except (TimeoutError, BlockingIOError):
                 return
             with conn:
                 result = serve_connection(result[0], conn, time.time())

@@ -2,6 +2,7 @@ import os
 import socket
 import stat
 import threading
+import time
 
 import pytest
 from cryptography.fernet import Fernet
@@ -98,5 +99,24 @@ def test_run_agent_exits_when_no_unlock_arrives_within_session_ttl(tmp_path, mon
     agent = threading.Thread(target=run_agent, args=(create_listener(str(socket_path)),), daemon=True)
     agent.start()
     agent.join(timeout=5)
+    assert not agent.is_alive()
+    assert not os.path.lexists(socket_path)
+
+
+@pytest.mark.integration
+def test_run_agent_exits_at_the_ttl_even_while_requests_that_do_not_refresh_the_session_keep_arriving(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setattr("password_manager.agent.SESSION_TTL", 1.0)
+    socket_path = tmp_path / "run" / "agent.sock"
+    agent = threading.Thread(target=run_agent, args=(create_listener(str(socket_path)),), daemon=True)
+    agent.start()
+    assert ask(socket_path, {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}) == {"ok": True}
+    # STATUS at about 0.3, 0.6 and 0.9 s: each is answered, but none refreshes the session
+    for _ in range(3):
+        time.sleep(0.3)
+        assert ask(socket_path, {"cmd": "STATUS"})["ok"] is True
+    # The key expires 1 s after UNLOCK; a wait that restarts after every connection would run until about 1.9 s
+    agent.join(timeout=0.5)
     assert not agent.is_alive()
     assert not os.path.lexists(socket_path)
