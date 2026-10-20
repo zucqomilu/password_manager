@@ -6,7 +6,8 @@ import keyring
 from keyring.errors import PasswordDeleteError
 from cryptography.fernet import Fernet
 
-from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, SESSION_TTL
+from . import agent
+from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, SESSION_TTL, get_socket_path
 from .logger import logger
 
 
@@ -22,6 +23,11 @@ def save_session(username: str, key: bytes):
         KEYRING_ACCOUNT,
         json.dumps(session_data),
     )
+
+    # The key reaches the agent only over its 0600, peer-checked socket: never argv, the environment or the log.
+    # The keyring entry above is written first, so it keeps pm usable if the agent cannot be started.
+    agent.start_agent(get_socket_path())
+    agent.send_request(get_socket_path(), {"cmd": "UNLOCK", "username": username, "key": key.decode()})
 
     logger.info(f"Session saved for user: {username}")
 

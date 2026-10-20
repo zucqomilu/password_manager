@@ -2,18 +2,22 @@ import pytest, base64, json, builtins, tempfile, os, shutil, time
 import keyring
 from keyring.backends.null import Keyring as NullKeyring
 from keyring.errors import PasswordDeleteError
+from password_manager.agent import AgentState, handle_request
 from password_manager.crypto import derive_key, wrap_data_key
 from cryptography.fernet import Fernet
 from unittest.mock import mock_open, patch
 
 
 # Point PM_DATA_DIR at a throwaway folder before any test module imports the package
-# (logger.py opens vault.log at import), so no test run touches the real data dir
+# (logger.py opens vault.log at import), so no test run touches the real data dir.
+# PM_AGENT_SOCKET goes in the same folder, so no test run can reach the agent holding the real key.
 def pytest_configure(config):
     os.environ["PM_DATA_DIR"] = tempfile.mkdtemp(prefix="pm-tests-")
+    os.environ["PM_AGENT_SOCKET"] = os.path.join(os.environ["PM_DATA_DIR"], "agent.sock")
 
 
 def pytest_unconfigure(config):
+    os.environ.pop("PM_AGENT_SOCKET")
     shutil.rmtree(os.environ.pop("PM_DATA_DIR"), ignore_errors=True)
 
 
@@ -51,8 +55,27 @@ def b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode()
 
 
+# An in-process stand-in for the agent daemon: the real handle_request() core, with no process and no socket.
+# "calls" records what pm asked of the agent, in order; "state" is what the agent holds.
 @pytest.fixture
-def set_test_env(monkeypatch):
+def fake_agent(monkeypatch):
+    agent = {"state": AgentState(), "calls": []}
+
+    def fake_start_agent(path):
+        agent["calls"].append(("start_agent", path))
+
+    def fake_send_request(path, request_):
+        agent["calls"].append(("send_request", path, request_))
+        agent["state"], response = handle_request(agent["state"], request_, time.time())
+        return response
+
+    monkeypatch.setattr("password_manager.agent.start_agent", fake_start_agent)
+    monkeypatch.setattr("password_manager.agent.send_request", fake_send_request)
+    return agent
+
+
+@pytest.fixture
+def set_test_env(monkeypatch, fake_agent):
     test_keyring.clear()
 
     with tempfile.TemporaryDirectory() as tmpdir:

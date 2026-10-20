@@ -1,3 +1,4 @@
+import os
 import pytest
 import time
 import json
@@ -29,6 +30,18 @@ def test_save_session_stores_session_in_keyring(set_test_env):
     assert fernet.decrypt(
         fernet.encrypt(b"test")
     ) == b"test"
+
+@pytest.mark.unit
+def test_save_session_sends_unlock_with_the_key_to_the_agent(set_test_env, fake_agent):
+    key = Fernet.generate_key()
+
+    save_session("testuser", key)
+
+    assert fake_agent["calls"] == [
+        ("start_agent", os.environ["PM_AGENT_SOCKET"]),
+        ("send_request", os.environ["PM_AGENT_SOCKET"], {"cmd": "UNLOCK", "username": "testuser", "key": key.decode()}),
+    ]
+
 
 @pytest.mark.unit
 def test_load_session_reads_session_from_keyring(set_test_env):
