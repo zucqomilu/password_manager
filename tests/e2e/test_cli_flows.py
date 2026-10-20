@@ -2,9 +2,8 @@ import pytest
 import os, re, json
 from pathlib import Path
 from password_manager.cli import main
-from password_manager.session import load_session, clear_session
+from password_manager.session import AgentCipher, load_session, clear_session
 from unittest.mock import patch
-from cryptography.fernet import Fernet
 
 from password_manager.storage import load_vault
 
@@ -13,12 +12,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MAIN_PATH = PROJECT_ROOT / "main.py"
 
 
-def get_session_data(username: str) -> tuple[str, Fernet]:
+def get_session_data(username: str) -> tuple[str, AgentCipher]:
     session_data = load_session()
     assert isinstance(session_data, tuple)
     loaded_user, fernet = session_data
     assert loaded_user == username
-    assert isinstance(fernet, Fernet)
 
     return session_data
 
@@ -199,23 +197,6 @@ def test_e2e_session_deleted_requires_login(capsys, set_test_env):
     assert load_session() is None
 
     generate_and_list_not_logged_in(label, capsys, main)
-
-
-@pytest.mark.e2e
-def test_e2e_corrupted_session(capsys, set_test_env):
-    username, password, label, _ = "brokenuser", "pass123", "bank", set_test_env
-    register_and_login(username, password, capsys, main)
-
-    with patch(
-        "password_manager.session.keyring.get_password",
-        return_value="this is not json",
-    ):
-        main(["generate", label])
-        
-    out = capsys.readouterr().out
-
-    assert "You are not logged in" in out
-    assert "Please run `login` first" in out
 
 
 @pytest.mark.e2e

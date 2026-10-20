@@ -2,12 +2,11 @@ import pytest
 from pathlib import Path
 from password_manager.user import register_user, authenticate_user
 from password_manager.core import save_password, get_password
-from password_manager.session import save_session, load_session, clear_session
+from password_manager.session import AgentCipher, save_session, load_session, clear_session
 from password_manager.storage import load_vault
-from cryptography.fernet import Fernet
 
 
-def register_login_save_session_load_session(username: str, password: str) -> Fernet:
+def register_login_save_session_load_session(username: str, password: str) -> AgentCipher:
     assert register_user(username, password)
     key = authenticate_user(username, password)
     assert isinstance(key, bytes)
@@ -16,7 +15,6 @@ def register_login_save_session_load_session(username: str, password: str) -> Fe
     assert session is not None
     user_loaded, fernet = session
     assert user_loaded == username
-    assert isinstance(fernet, Fernet)
 
     return fernet
 

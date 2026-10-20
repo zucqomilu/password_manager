@@ -1,13 +1,15 @@
 import json
 import base64
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from functools import partial
 
 import keyring
 from keyring.errors import PasswordDeleteError
-from cryptography.fernet import Fernet
 
 from . import agent
-from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, SESSION_TTL, get_socket_path
+from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, get_socket_path
 from .logger import logger
 
 
@@ -32,29 +34,35 @@ def save_session(username: str, key: bytes):
     logger.info(f"Session saved for user: {username}")
 
 
-def load_session() -> tuple[str, Fernet] | None:
-    try:
-        stored_data = keyring.get_password(
-            KEYRING_SERVICE,
-            KEYRING_ACCOUNT,
-        )
+# Data only: core.py calls .encrypt() and .decrypt() as on a Fernet, but both go to the agent,
+# so after login the key never enters a pm process again
+@dataclass(frozen=True)
+class AgentCipher:
+    encrypt: Callable[[bytes], bytes]
+    decrypt: Callable[[bytes], bytes]
 
-        if stored_data is None:
+
+def agent_encrypt(path: str, data: bytes) -> bytes:
+    return agent.send_request(path, {"cmd": "ENCRYPT", "plaintext": data.decode()})["token"].encode()
+
+
+def agent_decrypt(path: str, token: bytes) -> bytes:
+    return agent.send_request(path, {"cmd": "DECRYPT", "token": token.decode()})["plaintext"].encode()
+
+
+def load_session() -> tuple[str, AgentCipher] | None:
+    try:
+        status = agent.send_request(get_socket_path(), {"cmd": "STATUS"})
+
+        # Locked or expired: the agent enforces the TTL, and STATUS never extends it
+        if not status["ok"]:
             logger.info("No session found.")
             return None
 
-        session_data = json.loads(stored_data)
-
-        username = session_data["username"]
-        key = base64.urlsafe_b64decode(session_data["fernet_key"])
-        last_activity = session_data["last_activity"]
-
-        if time.time() - last_activity >= SESSION_TTL:
-            clear_session()
-            logger.info("Session expired.")
-            return None
-
-        return username, Fernet(key)
+        return status["username"], AgentCipher(
+            encrypt=partial(agent_encrypt, get_socket_path()),
+            decrypt=partial(agent_decrypt, get_socket_path()),
+        )
 
     except Exception as e:
         logger.error(f"Error loading session: {e}")

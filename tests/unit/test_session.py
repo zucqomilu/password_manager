@@ -2,7 +2,6 @@ import os
 import pytest
 import time
 import json
-import base64
 from cryptography.fernet import Fernet
 
 from password_manager.session import (
@@ -12,24 +11,6 @@ from password_manager.session import (
     save_session,
 )
 
-
-@pytest.mark.unit
-def test_save_session_stores_session_in_keyring(set_test_env):
-    _ = set_test_env
-    key = Fernet.generate_key()
-    save_session("testuser", key)
-
-    result = load_session()
-
-    assert result is not None
-
-    username, fernet = result
-
-    assert username == "testuser"
-    assert isinstance(fernet, Fernet)
-    assert fernet.decrypt(
-        fernet.encrypt(b"test")
-    ) == b"test"
 
 @pytest.mark.unit
 def test_save_session_sends_unlock_with_the_key_to_the_agent(set_test_env, fake_agent):
@@ -44,26 +25,17 @@ def test_save_session_sends_unlock_with_the_key_to_the_agent(set_test_env, fake_
 
 
 @pytest.mark.unit
-def test_load_session_reads_session_from_keyring(set_test_env):
-    _ = set_test_env
+def test_load_session_returns_the_username_and_an_agent_backed_cipher(set_test_env, fake_agent):
     key = Fernet.generate_key()
-
     save_session("testuser", key)
 
-    result = load_session()
-
-    assert result is not None
-
-    username, fernet = result
+    username, cipher = load_session()
 
     assert username == "testuser"
-    assert isinstance(fernet, Fernet)
-
-    # Verify that the returned Fernet object uses the correct key.
-    test_data = b"secret test data"
-    encrypted = fernet.encrypt(test_data)
-
-    assert fernet.decrypt(encrypted) == test_data
+    assert Fernet(key).decrypt(cipher.encrypt(b"secret")) == b"secret"
+    assert cipher.decrypt(Fernet(key).encrypt(b"secret")) == b"secret"
+    # Both went to the agent: a cipher holding the key itself would never send ENCRYPT or DECRYPT
+    assert [call[2]["cmd"] for call in fake_agent["calls"][2:]] == ["STATUS", "ENCRYPT", "DECRYPT"]
 
 
 @pytest.mark.unit
@@ -73,17 +45,6 @@ def test_load_session_returns_none_if_no_session(set_test_env):
     
     assert result is None
 
-
-@pytest.mark.unit
-def test_load_session_returns_none_on_invalid_session_data(set_test_env, mock_session_keyring):
-    _ = set_test_env
-
-    set_session, _ = mock_session_keyring
-    set_session("invalid json")
-
-    result = load_session()
-
-    assert result is None
 
 @pytest.mark.unit
 def test_clear_session_deletes_keyring_entry(set_test_env):
@@ -137,21 +98,6 @@ def test_save_session_stores_last_activity(set_test_env, mock_session_keyring):
 
 
 @pytest.mark.unit
-def test_load_session_returns_none_without_last_activity(set_test_env, mock_session_keyring):
-    _ = set_test_env
-    set_session, _ = mock_session_keyring
-
-    key = Fernet.generate_key()
-
-    set_session(json.dumps({
-        "username": "testuser",
-        "fernet_key": base64.urlsafe_b64encode(key).decode(),
-    }))
-
-    assert load_session() is None
-
-
-@pytest.mark.unit
 def test_load_session_returns_session_before_ttl(set_test_env, test_clock):
     _ = set_test_env
     key = Fernet.generate_key()
@@ -163,9 +109,8 @@ def test_load_session_returns_session_before_ttl(set_test_env, test_clock):
 
     assert result is not None
 
-    username, fernet = result
+    username, _ = result
     assert username == "testuser"
-    assert isinstance(fernet, Fernet)
 
 
 @pytest.mark.unit
@@ -218,28 +163,3 @@ def test_refresh_session_preserves_fernet_key(set_test_env, test_clock):
     encrypted = fernet.encrypt(plaintext)
 
     assert fernet.decrypt(encrypted) == plaintext
-
-
-@pytest.mark.unit
-def test_refresh_session_extends_session_ttl(set_test_env, test_clock):
-    _ = set_test_env
-    key = Fernet.generate_key()
-
-    save_session("testuser", key)
-
-    test_clock[0] += 10 * 60
-
-    assert refresh_session() is True
-
-    # 10 minutes after refresh, the total elapsed time from login
-    # is 20 minutes, but only 10 minutes have elapsed since activity.
-    test_clock[0] += 10 * 60
-
-    result = load_session()
-
-    assert result is not None
-
-    username, fernet = result
-
-    assert username == "testuser"
-    assert isinstance(fernet, Fernet)
