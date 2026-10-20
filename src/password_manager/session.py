@@ -7,6 +7,7 @@ from functools import partial
 
 import keyring
 from keyring.errors import PasswordDeleteError
+from cryptography.fernet import InvalidToken
 
 from . import agent
 from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, get_socket_path
@@ -46,8 +47,12 @@ def agent_encrypt(path: str, data: bytes) -> bytes:
     return agent.send_request(path, {"cmd": "ENCRYPT", "plaintext": data.decode()})["token"].encode()
 
 
+# A token the agent cannot decrypt raises InvalidToken, as Fernet would, so core.py can still report a damaged entry
 def agent_decrypt(path: str, token: bytes) -> bytes:
-    return agent.send_request(path, {"cmd": "DECRYPT", "token": token.decode()})["plaintext"].encode()
+    response = agent.send_request(path, {"cmd": "DECRYPT", "token": token.decode()})
+    if response.get("error") == "invalid token":
+        raise InvalidToken
+    return response["plaintext"].encode()
 
 
 def load_session() -> tuple[str, AgentCipher] | None:

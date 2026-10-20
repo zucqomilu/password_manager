@@ -2,7 +2,7 @@ import os
 import pytest
 import time
 import json
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from password_manager.session import (
     clear_session,
@@ -36,6 +36,15 @@ def test_load_session_returns_the_username_and_an_agent_backed_cipher(set_test_e
     assert cipher.decrypt(Fernet(key).encrypt(b"secret")) == b"secret"
     # Both went to the agent: a cipher holding the key itself would never send ENCRYPT or DECRYPT
     assert [call[2]["cmd"] for call in fake_agent["calls"][2:]] == ["STATUS", "ENCRYPT", "DECRYPT"]
+
+
+@pytest.mark.unit
+def test_agent_cipher_raises_invalid_token_for_a_token_the_agent_rejects(set_test_env):
+    save_session("testuser", Fernet.generate_key())
+    _, cipher = load_session()
+
+    with pytest.raises(InvalidToken):
+        cipher.decrypt(Fernet(Fernet.generate_key()).encrypt(b"secret"))
 
 
 @pytest.mark.unit
