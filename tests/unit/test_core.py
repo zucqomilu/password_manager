@@ -3,6 +3,7 @@ import logging
 from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
 from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
+from password_manager.session import SessionLocked
 
 
 @pytest.mark.unit
@@ -223,6 +224,14 @@ def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
         captured = capsys.readouterr()
         assert "- twitter" in captured.out
         assert "- github" not in captured.out
+
+
+@pytest.mark.unit
+def test_list_labels_lets_session_locked_through_instead_of_hiding_entries(valid_vault):
+    locked_cipher = Mock(decrypt=Mock(side_effect=SessionLocked))
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         pytest.raises(SessionLocked):
+        list_labels("alice", locked_cipher)
 
 
 @pytest.mark.unit

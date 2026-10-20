@@ -150,7 +150,8 @@ def list_labels(username, fernet, tags=None):
             fernet.decrypt(entry["password"].encode())
             print(f"- {label}{suffix}")
             found = True
-        except:
+        # Only a damaged entry is left out: SessionLocked must reach main(), never shorten the list
+        except InvalidToken:
             continue
 
     if tags is not None and not found:
