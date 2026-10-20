@@ -58,7 +58,9 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
 
             backup_vault()
 
-        except:
+        # Only an old password that will not decrypt is reported as a wrong master password;
+        # SessionLocked and a failed backup propagate, and either way nothing is saved
+        except InvalidToken:
             logger.error(f"Failed to overwrite '{label}' due to incorrect master password.")
             print(f"Error: A password already exists for '{label}', and the provided master password does not match.")
             return False

@@ -63,6 +63,18 @@ def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
 
 
 @pytest.mark.unit
+def test_save_password_lets_session_locked_through_instead_of_reporting_a_wrong_master_password(valid_vault):
+    locked_cipher = Mock(decrypt=Mock(side_effect=SessionLocked), encrypt=Mock(side_effect=SessionLocked))
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.backup_vault"), \
+         patch("password_manager.core.input", return_value='y'), \
+         pytest.raises(SessionLocked):
+        save_password("alice", "github", locked_cipher, "newpw")
+    mock_save.assert_not_called()
+
+
+@pytest.mark.unit
 def test_save_password_new_label(fernet):
     with patch("password_manager.core.load_vault", return_value={}), \
          patch("password_manager.core.save_vault") as mock_save, \
