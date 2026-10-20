@@ -5,6 +5,7 @@ import json
 from cryptography.fernet import Fernet, InvalidToken
 
 from password_manager.session import (
+    SessionLocked,
     clear_session,
     load_session,
     refresh_session,
@@ -45,6 +46,31 @@ def test_agent_cipher_raises_invalid_token_for_a_token_the_agent_rejects(set_tes
 
     with pytest.raises(InvalidToken):
         cipher.decrypt(Fernet(Fernet.generate_key()).encrypt(b"secret"))
+
+
+# The two ways the agent stops holding the key: it is locked but still answers, or it has exited
+def lock_agent(monkeypatch):
+    clear_session()
+
+
+def stop_agent(monkeypatch):
+    monkeypatch.setattr("password_manager.agent.send_request", lambda path, request_: None)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("lose_key", [lock_agent, stop_agent])
+@pytest.mark.parametrize("use_cipher", [
+    lambda cipher, key: cipher.encrypt(b"secret"),
+    lambda cipher, key: cipher.decrypt(Fernet(key).encrypt(b"secret")),
+], ids=["encrypt", "decrypt"])
+def test_agent_cipher_raises_session_locked_when_the_agent_no_longer_holds_the_key(set_test_env, monkeypatch, lose_key, use_cipher):
+    key = Fernet.generate_key()
+    save_session("testuser", key)
+    _, cipher = load_session()
+    lose_key(monkeypatch)
+
+    with pytest.raises(SessionLocked):
+        use_cipher(cipher, key)
 
 
 @pytest.mark.unit

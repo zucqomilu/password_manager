@@ -43,13 +43,27 @@ class AgentCipher:
     decrypt: Callable[[bytes], bytes]
 
 
+# Raised when the agent no longer holds the key (locked, expired or exited); carries no message or data
+class SessionLocked(Exception):
+    pass
+
+
+# The cipher's one route to the agent: a missing agent or a "locked" answer becomes SessionLocked, never InvalidToken,
+# so an expired session is never mistaken for a damaged vault entry
+def agent_response(path: str, request: dict) -> dict:
+    response = agent.send_request(path, request)
+    if response is None or response.get("error") == "locked":
+        raise SessionLocked
+    return response
+
+
 def agent_encrypt(path: str, data: bytes) -> bytes:
-    return agent.send_request(path, {"cmd": "ENCRYPT", "plaintext": data.decode()})["token"].encode()
+    return agent_response(path, {"cmd": "ENCRYPT", "plaintext": data.decode()})["token"].encode()
 
 
 # A token the agent cannot decrypt raises InvalidToken, as Fernet would, so core.py can still report a damaged entry
 def agent_decrypt(path: str, token: bytes) -> bytes:
-    response = agent.send_request(path, {"cmd": "DECRYPT", "token": token.decode()})
+    response = agent_response(path, {"cmd": "DECRYPT", "token": token.decode()})
     if response.get("error") == "invalid token":
         raise InvalidToken
     return response["plaintext"].encode()
