@@ -209,6 +209,15 @@ def test_get_password_invalid_decryption(fernet, capsys, valid_vault):
 
 
 @pytest.mark.unit
+def test_get_password_lets_session_locked_through_instead_of_reporting_corrupted_data(valid_vault):
+    locked_cipher = Mock(decrypt=Mock(side_effect=SessionLocked))
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy"), \
+         pytest.raises(SessionLocked):
+        get_password("alice", "github", locked_cipher)
+
+
+@pytest.mark.unit
 def test_get_password_label_not_found(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("builtins.print") as mock_print:

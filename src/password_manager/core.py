@@ -110,7 +110,8 @@ def get_password(username, label, fernet, show=False):
                 
             if show:
                 print(f"Password: {decrypted_pw}")
-        except:
+        # Only a damaged entry is reported as such: SessionLocked must reach main() and ask for login
+        except InvalidToken:
             logger.warning(f"Failed to decrypt password for '{label}' — possible wrong master password or corrupted data.")
             print("Incorrect master password or data corrupted.")
     else:
