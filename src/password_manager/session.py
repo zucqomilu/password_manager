@@ -96,6 +96,9 @@ def refresh_session() -> bool:
 
 
 def clear_session():
+    # Sent before the keyring delete, so the key leaves the agent's memory even if that delete fails.
+    # With no agent running, send_request() returns None and nothing is started.
+    agent.send_request(get_socket_path(), {"cmd": "LOCK"})
     try:
         keyring.delete_password(
             KEYRING_SERVICE,

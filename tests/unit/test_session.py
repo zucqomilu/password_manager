@@ -100,6 +100,13 @@ def test_clear_session_deletes_keyring_entry(set_test_env):
 
 
 @pytest.mark.unit
+def test_clear_session_sends_lock_to_the_agent(set_test_env, fake_agent):
+    clear_session()
+
+    assert fake_agent["calls"] == [("send_request", os.environ["PM_AGENT_SOCKET"], {"cmd": "LOCK"})]
+
+
+@pytest.mark.unit
 def test_clear_session_handles_missing_session(set_test_env):
     _ = set_test_env
 
