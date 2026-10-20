@@ -4,6 +4,7 @@ import re
 import sys
 from unittest.mock import Mock, call, patch
 from password_manager import cli
+from password_manager.session import SessionLocked
 
 
 def run_cli_with_args(args):
@@ -113,6 +114,22 @@ def test_no_session_for_protected_commands(capfd):
         run_cli_with_args(['prog', 'list'])
         output = capfd.readouterr()
         assert "not logged in" in output.out.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("args, command_function", [
+    (['prog', 'generate', 'mylabel'], 'save_password'),
+    (['prog', 'set', 'mylabel', '--password', 'mypassword'], 'save_password'),
+    (['prog', 'get', 'mylabel'], 'get_password'),
+    (['prog', 'list'], 'list_labels'),
+    (['prog', 'verify'], 'verify_vault'),
+])
+def test_main_asks_for_login_when_the_session_locks_during_a_command(capsys, args, command_function):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.refresh_session'), \
+         patch(f'password_manager.cli.{command_function}', side_effect=SessionLocked):
+        run_cli_with_args(args)
+    assert capsys.readouterr().out.endswith("Your session has expired. Please run `login` and try again.\n")
 
 
 @pytest.mark.unit

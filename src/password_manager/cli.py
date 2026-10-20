@@ -4,7 +4,7 @@ import argcomplete
 from .logger import logger
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
-from .session import load_session, save_session, clear_session, refresh_session
+from .session import SessionLocked, load_session, save_session, clear_session, refresh_session
 from .storage import load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
@@ -82,6 +82,39 @@ def build_parser():
 
     return parser
 
+def run_command(parser, args, username, fernet):
+    if args.command == 'generate':
+        pwd = generate_password(args.length)
+        if save_password(username, args.label, fernet, password=pwd, login=args.login):
+            logger.info(f"Generated new password for '{args.label}' with length {args.length}.")
+            print(f"Generated password: {pwd}")
+    elif args.command == "set":
+        if not args.password and not args.login and not args.tags:
+            logger.error(f"You must run with eather args --password or --login or --tags.")
+            print("Error: You must specify at least --password or --login or --tags.")
+            return
+        save_password(username, args.label, fernet, password=args.password, login=args.login, tags=args.tags)
+    elif args.command == 'get':
+        get_password(username, args.label, fernet, show=args.show)
+    elif args.command == 'remove':
+        remove_tags(username, args.label, tags=args.tags)
+    elif args.command == 'delete':
+        delete_label(username, args.label)
+    elif args.command == 'list':
+        list_labels(username, fernet, tags=args.tags)
+    elif args.command == 'verify':
+        result = verify_vault(username, fernet)
+        if result is None:
+            print("Failed to load password vault. The vault may be corrupted or unreadable.")
+            return
+        print(f"{result['ok']} entries OK")
+        for label in result["bad_password"]:
+            print(f"Password failed to decrypt: {label}")
+        for label in result["bad_login"]:
+            print(f"Login failed to decrypt: {label}")
+    else:
+        parser.print_help()
+
 def main(argv=None):
     parser = build_parser()
     argcomplete.autocomplete(parser, always_complete_options=False)
@@ -129,35 +162,10 @@ def main(argv=None):
 
     refresh_session()
 
-    # === HANDLE USER COMMANDS ===
-    if args.command == 'generate':
-        pwd = generate_password(args.length)
-        if save_password(username, args.label, fernet, password=pwd, login=args.login):
-            logger.info(f"Generated new password for '{args.label}' with length {args.length}.")
-            print(f"Generated password: {pwd}")
-    elif args.command == "set":
-        if not args.password and not args.login and not args.tags:
-            logger.error(f"You must run with eather args --password or --login or --tags.")
-            print("Error: You must specify at least --password or --login or --tags.")
-            return
-        save_password(username, args.label, fernet, password=args.password, login=args.login, tags=args.tags)
-    elif args.command == 'get':
-        get_password(username, args.label, fernet, show=args.show)
-    elif args.command == 'remove':
-        remove_tags(username, args.label, tags=args.tags)
-    elif args.command == 'delete':
-        delete_label(username, args.label)
-    elif args.command == 'list':
-        list_labels(username, fernet, tags=args.tags)
-    elif args.command == 'verify':
-        result = verify_vault(username, fernet)
-        if result is None:
-            print("Failed to load password vault. The vault may be corrupted or unreadable.")
-            return
-        print(f"{result['ok']} entries OK")
-        for label in result["bad_password"]:
-            print(f"Password failed to decrypt: {label}")
-        for label in result["bad_login"]:
-            print(f"Login failed to decrypt: {label}")
-    else:
-        parser.print_help()
+    # A key lost mid-command (expired, or a logout elsewhere) ends it with a login prompt, never a traceback.
+    # The core functions never save a half-done change, so nothing is left partly written.
+    try:
+        run_command(parser, args, username, fernet)
+    except SessionLocked:
+        logger.warning("Session expired during a command.")
+        print("Your session has expired. Please run `login` and try again.")
