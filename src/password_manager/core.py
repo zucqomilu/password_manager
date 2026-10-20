@@ -87,6 +87,18 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
     return True
 
 
+# A missing clipboard tool must not hide the password: report it and carry on, so --login and --show still print.
+# The exception is never printed or logged.
+def copy_to_clipboard(label, password):
+    try:
+        pyperclip.copy(password)
+        logger.info(f"Password for '{label}' has been copied to the clipboard.")
+        print(f"Password for '{label}' has been copied to the clipboard.")
+    except pyperclip.PyperclipException:
+        logger.warning(f"Could not copy the password for '{label}' to the clipboard.")
+        print(f"Could not copy the password for '{label}' to the clipboard.")
+
+
 def get_password(username, label, fernet, show=False):
     logger.info(f"Attempting to retrieve password for '{label}'.")
     
@@ -102,9 +114,7 @@ def get_password(username, label, fernet, show=False):
     if entry:
         try:
             decrypted_pw = fernet.decrypt(entry["password"].encode()).decode()
-            pyperclip.copy(decrypted_pw)
-            logger.info(f"Password for '{label}' has been copied to the clipboard.")
-            print(f"Password for '{label}' has been copied to the clipboard.")
+            copy_to_clipboard(label, decrypted_pw)
             
             if "login" in entry:
                 login = fernet.decrypt(entry["login"].encode()).decode()

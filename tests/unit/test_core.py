@@ -1,5 +1,6 @@
 import pytest
 import logging
+import pyperclip
 from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
 from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
@@ -199,6 +200,18 @@ def test_get_password_with_login(capsys, fernet, valid_vault):
         out = capsys.readouterr().out
         assert "Password: supersecurepass1" in out
         assert "Login: alice@example.com" in out
+
+
+@pytest.mark.unit
+def test_get_password_reports_a_clipboard_failure_and_still_shows_the_password_with_show(fernet, capsys, valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy", side_effect=pyperclip.PyperclipException("no clipboard")):
+        get_password("alice", "github", fernet, show=True)
+    out = capsys.readouterr().out
+    assert "Could not copy the password for 'github' to the clipboard." in out
+    assert "Password: supersecurepass1" in out
+    assert "Login: alice@example.com" in out
+    assert "data corrupted" not in out
 
 
 @pytest.mark.unit
