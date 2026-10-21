@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import partial
 
 import keyring
-from keyring.errors import PasswordDeleteError
+from keyring.errors import KeyringError, PasswordDeleteError
 from cryptography.fernet import InvalidToken
 
 from . import agent
@@ -26,11 +26,15 @@ def unlock_agent(username: str, key: bytes) -> bool:
 
 # Older pm versions kept the raw key in the OS keyring between commands. Login removes that entry, so after the
 # upgrade the key lives only in the agent's memory. No entry (already removed, or never written) is fine.
+# A keyring that cannot be reached must never block login: the removal is retried at every login, and only a
+# warning without the error's details goes to the log.
 def delete_legacy_session():
     try:
         keyring.delete_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
     except PasswordDeleteError:
         pass
+    except KeyringError:
+        logger.warning("Could not reach the keyring to remove the legacy session entry.")
 
 
 # The legacy entry goes first, so even a login that then fails removes it

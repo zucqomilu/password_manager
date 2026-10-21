@@ -3,6 +3,7 @@ import pytest
 import time
 import json
 from cryptography.fernet import Fernet, InvalidToken
+from keyring.errors import KeyringLocked, NoKeyringError
 
 from password_manager.session import (
     SessionLocked,
@@ -61,6 +62,19 @@ def test_save_session_deletes_the_legacy_keyring_session_entry(set_test_env, moc
     save_session("testuser", Fernet.generate_key())
 
     assert get_session() is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("error", [
+    NoKeyringError("No recommended backend"),  # no keyring installed or running
+    KeyringLocked("Failed to unlock"),         # a locked Secret Service the user did not unlock
+], ids=["no-keyring", "locked"])
+def test_save_session_still_logs_in_when_the_keyring_cannot_be_reached(set_test_env, fake_agent, monkeypatch, error):
+    monkeypatch.setattr("password_manager.session.keyring.delete_password", raise_error(error))
+
+    save_session("testuser", Fernet.generate_key())
+
+    assert fake_agent["state"].username == "testuser"
 
 
 @pytest.mark.unit
