@@ -82,6 +82,15 @@ def test_load_session_returns_none_if_no_session(set_test_env):
 
 
 @pytest.mark.unit
+def test_load_session_returns_none_when_no_agent_is_running(set_test_env, monkeypatch, capsys):
+    monkeypatch.setattr("password_manager.agent.send_request", lambda path, request_: None)
+
+    assert load_session() is None
+    # Not logged in is a normal state, not an error: main() prints the login prompt
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.unit
 def test_clear_session_deletes_keyring_entry(set_test_env):
     _ = set_test_env
     key = Fernet.generate_key()

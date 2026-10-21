@@ -73,8 +73,9 @@ def load_session() -> tuple[str, AgentCipher] | None:
     try:
         status = agent.send_request(get_socket_path(), {"cmd": "STATUS"})
 
-        # Locked or expired: the agent enforces the TTL, and STATUS never extends it
-        if not status["ok"]:
+        # No agent (never started, logged out or exited at the TTL), or locked or expired: either way not logged in.
+        # The agent enforces the TTL, and STATUS never extends it.
+        if status is None or not status["ok"]:
             logger.info("No session found.")
             return None
 
