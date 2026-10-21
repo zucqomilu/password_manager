@@ -91,12 +91,13 @@ def set_test_env(monkeypatch, fake_agent):
     test_keyring.clear()
 
 
+# Freezes time.time() for the whole test, which is the clock the (fake) agent checks the TTL against
 @pytest.fixture
 def test_clock(monkeypatch):
     current_time = [time.time()]
 
     monkeypatch.setattr(
-        "password_manager.session.time.time",
+        "time.time",
         lambda: current_time[0],
     )
 

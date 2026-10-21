@@ -4,7 +4,7 @@ import argcomplete
 from .logger import logger
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
-from .session import SessionLocked, load_session, save_session, clear_session, refresh_session
+from .session import SessionLocked, load_session, save_session, clear_session
 from .storage import load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
@@ -159,8 +159,6 @@ def main(argv=None):
         return
 
     username, fernet = session
-
-    refresh_session()
 
     # A key lost mid-command (expired, or a logout elsewhere) ends it with a login prompt, never a traceback.
     # The core functions never save a half-done change, so nothing is left partly written.

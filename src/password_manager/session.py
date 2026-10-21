@@ -1,5 +1,3 @@
-import json
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -102,39 +100,6 @@ def load_session() -> tuple[str, AgentCipher] | None:
         logger.error(f"Error loading session: {e}")
         print(f"Error loading session: {e}")
         return None
-
-
-def refresh_session() -> bool:
-    stored_data = keyring.get_password(
-        KEYRING_SERVICE,
-        KEYRING_ACCOUNT,
-    )
-
-    if stored_data is None:
-        logger.info("No session found to refresh.")
-        return False
-
-    try:
-        session_data = json.loads(stored_data)
-
-        session_data["last_activity"] = time.time()
-
-        keyring.set_password(
-            KEYRING_SERVICE,
-            KEYRING_ACCOUNT,
-            json.dumps(session_data),
-        )
-
-        logger.info(
-            f"Session activity refreshed for user: "
-            f"{session_data['username']}"
-        )
-
-        return True
-
-    except Exception as e:
-        logger.error(f"Error refreshing session: {e}")
-        return False
 
 
 # LOCK is sent whatever STATUS says, so the key always leaves the agent's memory; STATUS only picks the message.

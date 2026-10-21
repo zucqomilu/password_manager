@@ -9,7 +9,6 @@ from password_manager.session import (
     SessionLocked,
     clear_session,
     load_session,
-    refresh_session,
     save_session,
 )
 
@@ -156,7 +155,7 @@ def test_load_session_reports_an_error_and_returns_none_when_the_agent_cannot_be
 
 
 @pytest.mark.unit
-def test_clear_session_deletes_keyring_entry(set_test_env):
+def test_clear_session_ends_the_session(set_test_env):
     _ = set_test_env
     key = Fernet.generate_key()
 
@@ -224,19 +223,3 @@ def test_load_session_returns_none_after_ttl(set_test_env, test_clock):
     test_clock[0] += 15 * 60
 
     assert load_session() is None
-
-
-@pytest.mark.unit
-def test_refresh_session_returns_false_if_no_session(set_test_env):
-    _ = set_test_env
-    assert refresh_session() is False
-
-
-@pytest.mark.unit
-def test_refresh_session_returns_false_on_invalid_session_data(set_test_env, mock_session_keyring):
-    _ = set_test_env
-    set_session, _ = mock_session_keyring
-
-    set_session("invalid json")
-
-    assert refresh_session() is False
