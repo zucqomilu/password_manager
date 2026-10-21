@@ -1,5 +1,4 @@
 import json
-import base64
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,18 +24,18 @@ def unlock_agent(username: str, key: bytes) -> bool:
         return False
 
 
-def save_session(username: str, key: bytes):
-    session_data = {
-        "username": username,
-        "fernet_key": base64.urlsafe_b64encode(key).decode(),
-        "last_activity": time.time()
-    }
+# Older pm versions kept the raw key in the OS keyring between commands. Login removes that entry, so after the
+# upgrade the key lives only in the agent's memory. No entry (already removed, or never written) is fine.
+def delete_legacy_session():
+    try:
+        keyring.delete_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
+    except PasswordDeleteError:
+        pass
 
-    keyring.set_password(
-        KEYRING_SERVICE,
-        KEYRING_ACCOUNT,
-        json.dumps(session_data),
-    )
+
+# The legacy entry goes first, so even a login that then fails removes it
+def save_session(username: str, key: bytes):
+    delete_legacy_session()
 
     # Login only succeeds once the agent holds the key. Raised as ValueError, so main() prints "Login failed: ..."
     # through its existing handler instead of a traceback or a false "Login successful".

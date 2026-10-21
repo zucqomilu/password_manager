@@ -53,6 +53,17 @@ def test_save_session_reports_a_failed_login_when_the_agent_cannot_be_reached(se
 
 
 @pytest.mark.unit
+def test_save_session_deletes_the_legacy_keyring_session_entry(set_test_env, mock_session_keyring):
+    set_session, get_session = mock_session_keyring
+    # The shape older pm versions stored; the key is a throwaway, not a real one
+    set_session(json.dumps({"username": "testuser", "fernet_key": Fernet.generate_key().decode(), "last_activity": time.time()}))
+
+    save_session("testuser", Fernet.generate_key())
+
+    assert get_session() is None
+
+
+@pytest.mark.unit
 def test_load_session_returns_the_username_and_an_agent_backed_cipher(set_test_env, fake_agent):
     key = Fernet.generate_key()
     save_session("testuser", key)
@@ -161,27 +172,6 @@ def test_clear_session_handles_missing_session(set_test_env):
 
 
 @pytest.mark.unit
-def test_save_session_stores_last_activity(set_test_env, mock_session_keyring):
-    _ = set_test_env
-    _, get_session = mock_session_keyring
-
-    key = Fernet.generate_key()
-
-    before = time.time()
-    save_session("testuser", key)
-    after = time.time()
-
-    stored = get_session()
-    assert stored is not None
-
-    data = json.loads(stored)
-
-    assert data["username"] == "testuser"
-    assert data["last_activity"] >= before
-    assert data["last_activity"] <= after
-
-
-@pytest.mark.unit
 def test_load_session_returns_session_before_ttl(set_test_env, test_clock):
     _ = set_test_env
     key = Fernet.generate_key()
@@ -222,28 +212,3 @@ def test_refresh_session_returns_false_on_invalid_session_data(set_test_env, moc
     set_session("invalid json")
 
     assert refresh_session() is False
-
-
-@pytest.mark.unit
-def test_refresh_session_preserves_fernet_key(set_test_env, test_clock):
-    _ = set_test_env
-    key = Fernet.generate_key()
-
-    save_session("testuser", key)
-
-    test_clock[0] += 5 * 60
-
-    assert refresh_session() is True
-
-    result = load_session()
-
-    assert result is not None
-
-    username, fernet = result
-
-    assert username == "testuser"
-
-    plaintext = b"important secret"
-    encrypted = fernet.encrypt(plaintext)
-
-    assert fernet.decrypt(encrypted) == plaintext

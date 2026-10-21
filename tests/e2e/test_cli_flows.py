@@ -1,5 +1,5 @@
 import pytest
-import os, re, json
+import os, re
 from pathlib import Path
 from password_manager.cli import main
 from password_manager.session import AgentCipher, load_session, clear_session
@@ -468,19 +468,18 @@ def test_update_password_and_login_on_existing_label(set_test_env, fernet, capsy
 
 
 @pytest.mark.e2e
-def test_e2e_session_activity_is_refreshed(capsys, set_test_env, mock_session_keyring):
+def test_e2e_session_activity_is_refreshed(capsys, set_test_env, fake_agent, test_clock):
     _ = set_test_env
     username, password = "refreshuser", "refreshpass"
 
     register_and_login(username, password, capsys, main)
+    main(["set", "github", "--password", "supersecurepass1"])
 
-    _, get_session = mock_session_keyring
-
-    before = json.loads(get_session())["last_activity"]
+    # Only a use of the key refreshes the session, so list needs an entry to decrypt
+    before = fake_agent["state"].last_activity
+    test_clock[0] += 60
 
     main(["list"])
     capsys.readouterr()
 
-    after = json.loads(get_session())["last_activity"]
-
-    assert after > before
+    assert fake_agent["state"].last_activity > before
