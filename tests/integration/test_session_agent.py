@@ -69,3 +69,24 @@ def test_the_agent_expires_after_the_ttl_and_get_asks_for_login(real_agent_socke
     send_request(real_agent_socket, {"cmd": "LOCK"})
     agent_thread.join(timeout=2)
     assert not agent_thread.is_alive()
+
+
+# Nothing arrives after the login, so only the agent's own accept timeout can end it. A thread again, with the TTL
+# patched down to a second; the register runs first, so the locked agent's wait for UNLOCK is not part of the test.
+@pytest.mark.integration
+def test_an_idle_agent_exits_after_the_ttl_without_receiving_any_request(real_agent_socket, monkeypatch, capsys):
+    monkeypatch.setattr("password_manager.agent.SESSION_TTL", 1.0)
+    main(["register", "--username", "alice", "--password", "correct horse battery"])
+    agent_thread = threading.Thread(target=run_agent, args=(create_listener(real_agent_socket),), daemon=True)
+    agent_thread.start()
+    main(["login", "--username", "alice", "--password", "correct horse battery"])
+    capsys.readouterr()
+    assert agent_thread.is_alive()
+
+    agent_thread.join(timeout=3)
+
+    # Gone on its own: the key has left memory and the socket is removed, with no LOCK and no request at all
+    assert not agent_thread.is_alive()
+    assert not os.path.exists(real_agent_socket)
+    main(["get", "github"])
+    assert capsys.readouterr().out == "You are not logged in. Please run `login` first.\n"
