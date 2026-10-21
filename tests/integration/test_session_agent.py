@@ -1,10 +1,11 @@
 import os
+import threading
 import time
 from unittest.mock import patch
 
 import pytest
 
-from password_manager.agent import send_request
+from password_manager.agent import create_listener, run_agent, send_request
 from password_manager.cli import main
 
 
@@ -45,3 +46,26 @@ def test_login_starts_the_agent_set_and_get_work_logout_stops_it(real_agent_sock
     assert capsys.readouterr().out == "Session cleared.\n"
     assert wait_for_removal(real_agent_socket)
     assert send_request(real_agent_socket, {"cmd": "STATUS"}) is None
+
+
+# The agent runs in a thread here, not as a daemon, so test_clock's frozen time.time() is the clock it checks the TTL
+# against: the full 15 minutes pass in an instant, with no sleep and no shortened TTL.
+@pytest.mark.integration
+def test_the_agent_expires_after_the_ttl_and_get_asks_for_login(real_agent_socket, test_clock, capsys):
+    agent_thread = threading.Thread(target=run_agent, args=(create_listener(real_agent_socket),), daemon=True)
+    agent_thread.start()
+    main(["register", "--username", "alice", "--password", "correct horse battery"])
+    main(["login", "--username", "alice", "--password", "correct horse battery"])
+    main(["set", "github", "--password", "supersecurepass1"])
+    capsys.readouterr()
+
+    test_clock[0] += 15 * 60
+    with patch("password_manager.core.pyperclip.copy") as mock_copy:
+        main(["get", "github", "--show"])
+
+    assert capsys.readouterr().out == "You are not logged in. Please run `login` first.\n"
+    mock_copy.assert_not_called()
+    # The login reused this agent instead of spawning a daemon, so the thread is what held the key
+    send_request(real_agent_socket, {"cmd": "LOCK"})
+    agent_thread.join(timeout=2)
+    assert not agent_thread.is_alive()
