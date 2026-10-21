@@ -173,7 +173,21 @@ def test_clear_session_deletes_keyring_entry(set_test_env):
 def test_clear_session_sends_lock_to_the_agent(set_test_env, fake_agent):
     clear_session()
 
-    assert fake_agent["calls"] == [("send_request", os.environ["PM_AGENT_SOCKET"], {"cmd": "LOCK"})]
+    assert fake_agent["calls"][-1] == ("send_request", os.environ["PM_AGENT_SOCKET"], {"cmd": "LOCK"})
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("logged_in, message", [
+    (True, "Session cleared."),
+    (False, "No session to clear."),
+], ids=["logged-in", "logged-out"])
+def test_clear_session_reports_session_cleared_only_when_the_agent_held_a_key(set_test_env, capsys, logged_in, message):
+    if logged_in:
+        save_session("testuser", Fernet.generate_key())
+
+    clear_session()
+
+    assert capsys.readouterr().out == f"{message}\n"
 
 
 @pytest.mark.unit

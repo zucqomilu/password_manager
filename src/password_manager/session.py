@@ -137,18 +137,17 @@ def refresh_session() -> bool:
         return False
 
 
+# LOCK is sent whatever STATUS says, so the key always leaves the agent's memory; STATUS only picks the message.
+# With no agent running, both requests return None and nothing is started. The legacy entry goes through
+# delete_legacy_session(), so an unreachable keyring cannot break logout either.
 def clear_session():
-    # Sent before the keyring delete, so the key leaves the agent's memory even if that delete fails.
-    # With no agent running, send_request() returns None and nothing is started.
+    status = agent.send_request(get_socket_path(), {"cmd": "STATUS"})
     agent.send_request(get_socket_path(), {"cmd": "LOCK"})
-    try:
-        keyring.delete_password(
-            KEYRING_SERVICE,
-            KEYRING_ACCOUNT,
-        )
+    delete_legacy_session()
+
+    if status is not None and status["ok"]:
         logger.info("Session cleared.")
         print("Session cleared.")
-
-    except PasswordDeleteError:
+    else:
         logger.warning("No session to clear.")
         print("No session to clear.")
