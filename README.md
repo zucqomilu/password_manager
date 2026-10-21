@@ -20,9 +20,8 @@ The project is currently intended for **learning and personal use**, with the lo
 * Atomic saves: a crash or full disk never leaves a half-written vault or users file
 * `pm verify` checks that every stored password and login still decrypts
 * Shell tab-completion for commands, options, labels and tags (via `argcomplete`), without decrypting anything
-* Session persistence through the operating system's keyring
-* 15-minute session expiration
-* Automatic session activity refresh
+* Sessions held by a per-user agent process: the data key stays in memory, never on disk or in the keyring
+* 15-minute session expiration, extended each time a password is encrypted or decrypted
 * JSON-based storage
 * Storage validation to detect malformed or corrupted data
 * Comprehensive automated test suite
@@ -121,32 +120,23 @@ The actual encrypted values are not human-readable.
 
 ## Session Management
 
-The application does not use a disk-based `session.json` file.
+A session is held by a small background process, the **session agent**, in the style of `ssh-agent`. The data key lives only in the agent's memory: it is never written to disk or to the keyring, and `pm` commands never see it after login. They send each value to the agent to be encrypted or decrypted.
 
-Instead, authenticated session information is stored using the operating system's keyring through the [`keyring`](https://pypi.org/project/keyring/) Python package.
-
-A session contains:
-
-* Username
-* Fernet encryption key
-* Last activity timestamp
+The agent listens on a Unix socket at `$XDG_RUNTIME_DIR/password_manager/agent.sock` (or in the data directory when `XDG_RUNTIME_DIR` is not set; `PM_AGENT_SOCKET` overrides both). The directory is `0700`, the socket `0600`, and the agent only answers processes running as the same user.
 
 The session uses a **15-minute time-to-live (TTL)**.
 
 ### Session lifecycle
 
-After successful authentication:
+1. `pm login` unwraps the data key (or derives it for a not-yet-upgraded v1 account), starts the agent if none is running, and hands it the key.
+2. Commands ask the agent whether a session is active, then use it to encrypt and decrypt.
+3. Each successful encryption or decryption extends the session. Commands that do not use the key (`delete`, `remove`) do not.
+4. After 15 minutes without use, the agent drops the key and exits.
+5. `pm logout` tells the agent to drop the key and exit.
 
-1. The data key (Fernet key) is unwrapped, or derived for a not-yet-upgraded v1 account.
-2. The username, Fernet key, and activity timestamp are stored in the system keyring.
-3. Subsequent commands load the session from the keyring.
-4. The session timestamp is checked against the 15-minute TTL.
-5. Expired sessions are automatically deleted.
-6. Successful authenticated operations refresh the activity timestamp.
+If the session ends while a command is running, the command stops without saving anything and asks you to log in again.
 
-Logging out explicitly removes the session from the keyring.
-
-This means that normal application operation no longer creates or depends on a `session.json` file.
+Older versions kept the key in the operating system's keyring between commands. The first login with this version removes that entry.
 
 ## Storage
 
@@ -304,7 +294,7 @@ What completes:
 * Tags for `--tag`; for `remove`, only the tags of the label already typed.
 * Nothing for `generate`'s new label, `--password`, `--login` or `--username`, so a file name can never slip into a password.
 
-Labels and tags are read from `vault.json`, where they are stored in plain text. Completion never decrypts anything and never reads the keyring session or `users.json`, so it also works (and shows labels) when you are logged out. A damaged vault simply offers no suggestions.
+Labels and tags are read from `vault.json`, where they are stored in plain text. Completion never decrypts anything and never contacts the session agent or reads `users.json`, so it also works (and shows labels) when you are logged out. A damaged vault simply offers no suggestions.
 
 ## Usage
 
@@ -364,7 +354,7 @@ Or specify the username:
 pm login --username alice
 ```
 
-After successful authentication, a session is created in the operating system's keyring.
+After successful authentication, the session agent is started and holds the key for 15 minutes.
 
 ### Logout
 
@@ -702,11 +692,12 @@ password_manager/
 | Module                | Responsibility                                     |
 | --------------------- | -------------------------------------------------- |
 | `cli.py`              | Command-line interface and command dispatch        |
-| `constants.py`        | File paths, keyring configuration, and session TTL |
+| `agent.py`            | Session agent: holds the key, encrypts, decrypts   |
+| `constants.py`        | File and socket paths, keyring IDs, session TTL    |
 | `core.py`             | Password generation and vault operations           |
 | `crypto.py`           | Salt generation and cryptographic key derivation   |
 | `logger.py`           | Application logging                                |
-| `session.py`          | Keyring-backed session management                  |
+| `session.py`          | Login, logout and the agent-backed cipher          |
 | `storage.py`          | Reading, writing, and backing up persistent data   |
 | `user.py`             | User registration and authentication               |
 | `validate_storage.py` | Validation of users and vault data                 |
@@ -728,9 +719,9 @@ pytest -m "unit or integration"   # unit and integration tests
 pytest                            # complete suite
 ```
 
-No test can touch the real operating-system keyring: the test setup replaces it with an inactive backend for every test.
+No test can touch the real operating-system keyring or the real session agent: the test setup replaces the keyring with an inactive backend and points the agent socket into a throwaway directory.
 
-The current test suite contains **297 tests**.
+The current test suite contains **375 tests**.
 
 Coverage can be generated with:
 
@@ -794,13 +785,12 @@ Users should protect:
   * Vault backups
   * `users.json` backups
 * The user's operating-system account
-* The operating-system keyring
 
 ### Session key
 
-The Fernet encryption key is stored in the operating system keyring while an authenticated session is active.
+The Fernet encryption key is held only in the session agent's memory while a session is active. Any process running as your user can ask the agent to decrypt values during that time, the same trust model as `ssh-agent`.
 
-Sessions expire after 15 minutes of inactivity.
+Sessions expire after 15 minutes without use.
 
 ## Current Limitations
 
@@ -821,9 +811,7 @@ The project is actively being developed. Current limitations include:
 
 The project is currently under active development.
 
-Recent development has focused on replacing disk-based session caching with operating-system keyring storage, introducing session expiration, and adding tag-based organization, filtering, and removal for password entries.
-
-The previous `session.json` workflow has been removed from normal application operation.
+Recent development has focused on moving the session key out of the operating-system keyring into a per-user session agent, along with tag-based organization, filtering, and removal for password entries.
 
 Future development will focus on improving the security model, usability, storage architecture, and production readiness of the application.
 
