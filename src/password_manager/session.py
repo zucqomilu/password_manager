@@ -14,6 +14,17 @@ from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, get_socket_path
 from .logger import logger
 
 
+# True once a running agent has taken the key. Socket errors (a taken path, a permission problem, a timeout)
+# count as not reached; they are not shown, since only save_session()'s fixed message is.
+# The key reaches the agent only over its 0600, peer-checked socket: never argv, the environment or the log.
+def unlock_agent(username: str, key: bytes) -> bool:
+    try:
+        agent.start_agent(get_socket_path())
+        return agent.send_request(get_socket_path(), {"cmd": "UNLOCK", "username": username, "key": key.decode()}) is not None
+    except OSError:
+        return False
+
+
 def save_session(username: str, key: bytes):
     session_data = {
         "username": username,
@@ -27,10 +38,10 @@ def save_session(username: str, key: bytes):
         json.dumps(session_data),
     )
 
-    # The key reaches the agent only over its 0600, peer-checked socket: never argv, the environment or the log.
-    # The keyring entry above is written first, so it keeps pm usable if the agent cannot be started.
-    agent.start_agent(get_socket_path())
-    agent.send_request(get_socket_path(), {"cmd": "UNLOCK", "username": username, "key": key.decode()})
+    # Login only succeeds once the agent holds the key. Raised as ValueError, so main() prints "Login failed: ..."
+    # through its existing handler instead of a traceback or a false "Login successful".
+    if not unlock_agent(username, key):
+        raise ValueError("could not start the session agent")
 
     logger.info(f"Session saved for user: {username}")
 

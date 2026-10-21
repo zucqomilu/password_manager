@@ -25,6 +25,33 @@ def test_save_session_sends_unlock_with_the_key_to_the_agent(set_test_env, fake_
     ]
 
 
+# Stands in for an agent function that fails outright
+def raise_error(error):
+    def fail(*args):
+        raise error
+    return fail
+
+
+# The ways login can fail to hand the key to an agent: none can be started (the socket path is taken by
+# something else), or the agent is gone before the UNLOCK arrives
+def block_agent_start(monkeypatch):
+    monkeypatch.setattr("password_manager.agent.start_agent", raise_error(OSError(98, "Address already in use")))
+
+
+def lose_agent_before_unlock(monkeypatch):
+    monkeypatch.setattr("password_manager.agent.send_request", lambda path, request_: None)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("break_agent", [block_agent_start, lose_agent_before_unlock])
+def test_save_session_reports_a_failed_login_when_the_agent_cannot_be_reached(set_test_env, monkeypatch, break_agent):
+    break_agent(monkeypatch)
+
+    # main() reports a ValueError from login as "Login failed: ..." and stops before any command runs
+    with pytest.raises(ValueError, match="^could not start the session agent$"):
+        save_session("testuser", Fernet.generate_key())
+
+
 @pytest.mark.unit
 def test_load_session_returns_the_username_and_an_agent_backed_cipher(set_test_env, fake_agent):
     key = Fernet.generate_key()
@@ -88,13 +115,6 @@ def test_load_session_returns_none_when_no_agent_is_running(set_test_env, monkey
     assert load_session() is None
     # Not logged in is a normal state, not an error: main() prints the login prompt
     assert capsys.readouterr().out == ""
-
-
-# Stands in for send_request() when the agent cannot be asked at all
-def raise_error(error):
-    def fail(path, request_):
-        raise error
-    return fail
 
 
 @pytest.mark.unit
