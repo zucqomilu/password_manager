@@ -90,6 +90,26 @@ def test_load_session_returns_none_when_no_agent_is_running(set_test_env, monkey
     assert capsys.readouterr().out == ""
 
 
+# Stands in for send_request() when the agent cannot be asked at all
+def raise_error(error):
+    def fail(path, request_):
+        raise error
+    return fail
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("error", [
+    PermissionError(13, "Permission denied"),   # a socket owned by someone else
+    TimeoutError("timed out"),                  # a stuck agent
+    json.JSONDecodeError("Expecting value", "", 0),  # a garbled reply
+], ids=["permission", "timeout", "garbled"])
+def test_load_session_reports_an_error_and_returns_none_when_the_agent_cannot_be_asked(set_test_env, monkeypatch, capsys, error):
+    monkeypatch.setattr("password_manager.agent.send_request", raise_error(error))
+
+    assert load_session() is None
+    assert capsys.readouterr().out.startswith("Error loading session:")
+
+
 @pytest.mark.unit
 def test_clear_session_deletes_keyring_entry(set_test_env):
     _ = set_test_env
