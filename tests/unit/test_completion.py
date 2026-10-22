@@ -53,10 +53,12 @@ def test_completing_pm_set_dashes_lists_the_set_commands_flags():
 @pytest.mark.parametrize("line", ["pm ", "pm get ", "pm set github --", "pm delete "])
 def test_completion_never_loads_users_file_or_session(line):
     with patch("password_manager.user.load_users") as mock_load_users, \
-         patch("password_manager.session.keyring.get_password") as mock_get_session:
+         patch("password_manager.session.keyring.get_password") as mock_get_session, \
+         patch("password_manager.agent.send_request") as mock_send_request:
         complete(line)
     mock_load_users.assert_not_called()
     mock_get_session.assert_not_called()
+    mock_send_request.assert_not_called()
 
 
 @pytest.mark.unit

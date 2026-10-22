@@ -1,8 +1,10 @@
 import pytest
 import logging
+import pyperclip
 from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
 from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
+from password_manager.session import SessionLocked
 
 
 @pytest.mark.unit
@@ -59,6 +61,18 @@ def test_save_password_backup_decryption_fail(caplog, fernet, valid_vault):
         result = save_password("alice", "github", fernet, "newpw")
         assert result is False
         assert "Failed to overwrite 'github' due to incorrect master password." in caplog.text
+
+
+@pytest.mark.unit
+def test_save_password_lets_session_locked_through_instead_of_reporting_a_wrong_master_password(valid_vault):
+    locked_cipher = Mock(decrypt=Mock(side_effect=SessionLocked), encrypt=Mock(side_effect=SessionLocked))
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.save_vault") as mock_save, \
+         patch("password_manager.core.backup_vault"), \
+         patch("password_manager.core.input", return_value='y'), \
+         pytest.raises(SessionLocked):
+        save_password("alice", "github", locked_cipher, "newpw")
+    mock_save.assert_not_called()
 
 
 @pytest.mark.unit
@@ -189,6 +203,18 @@ def test_get_password_with_login(capsys, fernet, valid_vault):
 
 
 @pytest.mark.unit
+def test_get_password_reports_a_clipboard_failure_and_still_shows_the_password_with_show(fernet, capsys, valid_vault):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy", side_effect=pyperclip.PyperclipException("no clipboard")):
+        get_password("alice", "github", fernet, show=True)
+    out = capsys.readouterr().out
+    assert "Could not copy the password for 'github' to the clipboard." in out
+    assert "Password: supersecurepass1" in out
+    assert "Login: alice@example.com" in out
+    assert "data corrupted" not in out
+
+
+@pytest.mark.unit
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \
          caplog.at_level(logging.ERROR):
@@ -208,6 +234,15 @@ def test_get_password_invalid_decryption(fernet, capsys, valid_vault):
 
 
 @pytest.mark.unit
+def test_get_password_lets_session_locked_through_instead_of_reporting_corrupted_data(valid_vault):
+    locked_cipher = Mock(decrypt=Mock(side_effect=SessionLocked))
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy"), \
+         pytest.raises(SessionLocked):
+        get_password("alice", "github", locked_cipher)
+
+
+@pytest.mark.unit
 def test_get_password_label_not_found(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
          patch("builtins.print") as mock_print:
@@ -223,6 +258,14 @@ def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
         captured = capsys.readouterr()
         assert "- twitter" in captured.out
         assert "- github" not in captured.out
+
+
+@pytest.mark.unit
+def test_list_labels_lets_session_locked_through_instead_of_hiding_entries(valid_vault):
+    locked_cipher = Mock(decrypt=Mock(side_effect=SessionLocked))
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         pytest.raises(SessionLocked):
+        list_labels("alice", locked_cipher)
 
 
 @pytest.mark.unit

@@ -1,6 +1,6 @@
 import pytest
 
-from password_manager.constants import get_data_dir, get_log, get_users, get_vault
+from password_manager.constants import get_data_dir, get_log, get_socket_path, get_users, get_vault
 
 
 # Keep a PM_DATA_DIR exported in the developer's shell from leaking into these tests
@@ -61,3 +61,29 @@ def test_get_users_resolves_users_json_inside_data_dir(monkeypatch):
 def test_get_log_resolves_vault_log_inside_data_dir(monkeypatch):
     monkeypatch.setenv("PM_DATA_DIR", "/custom/pm")
     assert get_log() == "/custom/pm/vault.log"
+
+
+@pytest.mark.unit
+def test_get_socket_path_uses_xdg_runtime_dir(monkeypatch):
+    monkeypatch.delenv("PM_AGENT_SOCKET", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
+    assert get_socket_path() == "/run/user/1000/password_manager/agent.sock"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("xdg_runtime_dir", [None, "", "relative/run"])
+def test_get_socket_path_falls_back_to_the_data_dir_without_an_absolute_xdg_runtime_dir(monkeypatch, xdg_runtime_dir):
+    monkeypatch.delenv("PM_AGENT_SOCKET", raising=False)
+    monkeypatch.setenv("PM_DATA_DIR", "/custom/pm")
+    if xdg_runtime_dir is None:
+        monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    else:
+        monkeypatch.setenv("XDG_RUNTIME_DIR", xdg_runtime_dir)
+    assert get_socket_path() == "/custom/pm/agent.sock"
+
+
+@pytest.mark.unit
+def test_get_socket_path_honors_pm_agent_socket_override(monkeypatch):
+    monkeypatch.setenv("PM_AGENT_SOCKET", "/custom/agent.sock")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
+    assert get_socket_path() == "/custom/agent.sock"

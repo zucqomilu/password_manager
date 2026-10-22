@@ -58,7 +58,9 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
 
             backup_vault()
 
-        except:
+        # Only an old password that will not decrypt is reported as a wrong master password;
+        # SessionLocked and a failed backup propagate, and either way nothing is saved
+        except InvalidToken:
             logger.error(f"Failed to overwrite '{label}' due to incorrect master password.")
             print(f"Error: A password already exists for '{label}', and the provided master password does not match.")
             return False
@@ -85,6 +87,18 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
     return True
 
 
+# A missing clipboard tool must not hide the password: report it and carry on, so --login and --show still print.
+# The exception is never printed or logged.
+def copy_to_clipboard(label, password):
+    try:
+        pyperclip.copy(password)
+        logger.info(f"Password for '{label}' has been copied to the clipboard.")
+        print(f"Password for '{label}' has been copied to the clipboard.")
+    except pyperclip.PyperclipException:
+        logger.warning(f"Could not copy the password for '{label}' to the clipboard.")
+        print(f"Could not copy the password for '{label}' to the clipboard.")
+
+
 def get_password(username, label, fernet, show=False):
     logger.info(f"Attempting to retrieve password for '{label}'.")
     
@@ -100,9 +114,7 @@ def get_password(username, label, fernet, show=False):
     if entry:
         try:
             decrypted_pw = fernet.decrypt(entry["password"].encode()).decode()
-            pyperclip.copy(decrypted_pw)
-            logger.info(f"Password for '{label}' has been copied to the clipboard.")
-            print(f"Password for '{label}' has been copied to the clipboard.")
+            copy_to_clipboard(label, decrypted_pw)
             
             if "login" in entry:
                 login = fernet.decrypt(entry["login"].encode()).decode()
@@ -110,7 +122,8 @@ def get_password(username, label, fernet, show=False):
                 
             if show:
                 print(f"Password: {decrypted_pw}")
-        except:
+        # Only a damaged entry is reported as such: SessionLocked must reach main() and ask for login
+        except InvalidToken:
             logger.warning(f"Failed to decrypt password for '{label}' — possible wrong master password or corrupted data.")
             print("Incorrect master password or data corrupted.")
     else:
@@ -150,7 +163,8 @@ def list_labels(username, fernet, tags=None):
             fernet.decrypt(entry["password"].encode())
             print(f"- {label}{suffix}")
             found = True
-        except:
+        # Only a damaged entry is left out: SessionLocked must reach main(), never shorten the list
+        except InvalidToken:
             continue
 
     if tags is not None and not found:

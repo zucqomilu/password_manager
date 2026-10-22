@@ -4,6 +4,7 @@ import re
 import sys
 from unittest.mock import Mock, call, patch
 from password_manager import cli
+from password_manager.session import SessionLocked
 
 
 def run_cli_with_args(args):
@@ -54,7 +55,6 @@ def test_logout():
 @pytest.mark.unit
 def test_generate_command():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.generate_password') as mock_generate_password, \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
@@ -68,7 +68,6 @@ def test_generate_command():
 @pytest.mark.unit
 def test_set_command_success():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'set', 'mylabel', '--password', 'mypassword', '--login', 'testuser@example.com'])
@@ -78,7 +77,6 @@ def test_set_command_success():
 @pytest.mark.unit
 def test_set_command_failure(capsys):
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'set', 'mylabel'])
@@ -90,7 +88,6 @@ def test_set_command_failure(capsys):
 @pytest.mark.unit
 def test_get_command():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.get_password') as mock_get_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'get', 'mylabel', '--show'])
@@ -100,7 +97,6 @@ def test_get_command():
 @pytest.mark.unit
 def test_list_command():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'list'])
@@ -116,9 +112,33 @@ def test_no_session_for_protected_commands(capfd):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("args, command_function", [
+    (['prog', 'generate', 'mylabel'], 'save_password'),
+    (['prog', 'set', 'mylabel', '--password', 'mypassword'], 'save_password'),
+    (['prog', 'get', 'mylabel'], 'get_password'),
+    (['prog', 'list'], 'list_labels'),
+    (['prog', 'verify'], 'verify_vault'),
+])
+def test_main_asks_for_login_when_the_session_locks_during_a_command(capsys, args, command_function):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch(f'password_manager.cli.{command_function}', side_effect=SessionLocked):
+        run_cli_with_args(args)
+    assert capsys.readouterr().out.endswith("Your session has expired. Please run `login` and try again.\n")
+
+
+@pytest.mark.unit
+def test_main_no_longer_calls_refresh_session():
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.list_labels'), \
+         patch('password_manager.session.keyring') as mock_keyring:
+        run_cli_with_args(['prog', 'list'])
+    # The agent refreshes the session whenever the key is used; nothing in the keyring is read or rewritten
+    assert mock_keyring.mock_calls == []
+
+
+@pytest.mark.unit
 def test_set_command_with_tag():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -137,7 +157,6 @@ def test_set_command_with_tag():
 @pytest.mark.unit
 def test_list_command_with_tag():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -153,7 +172,6 @@ def test_list_command_with_tag():
 @pytest.mark.unit
 def test_list_command_with_multiple_tags():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -169,7 +187,6 @@ def test_list_command_with_multiple_tags():
 @pytest.mark.unit
 def test_remove_command_with_tag():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.remove_tags') as mock_remove_tags:
         mock_load_session.return_value = ('testuser', b'fernet')
 
@@ -185,7 +202,6 @@ def test_remove_command_with_tag():
 @pytest.mark.unit
 def test_remove_command_with_multiple_tags():
     with patch('password_manager.cli.load_session') as mock_load_session, \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.remove_tags') as mock_remove_tags:
 
         mock_load_session.return_value = ('testuser', b'fernet')
@@ -202,7 +218,6 @@ def test_remove_command_with_multiple_tags():
 @pytest.mark.unit
 def test_verify_command_prints_verification_summary(capsys):
     with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.verify_vault', return_value={"ok": 2, "bad_password": ["gitlab"], "bad_login": ["github"]}) as mock_verify_vault:
         run_cli_with_args(['prog', 'verify'])
         mock_verify_vault.assert_called_once_with('testuser', b'fernet')
@@ -216,7 +231,6 @@ def test_verify_command_prints_verification_summary(capsys):
 @pytest.mark.unit
 def test_verify_command_prints_error_when_vault_cannot_be_loaded(capsys):
     with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.verify_vault', return_value=None):
         run_cli_with_args(['prog', 'verify'])
         assert capsys.readouterr().out == "Failed to load password vault. The vault may be corrupted or unreadable.\n"
@@ -225,7 +239,6 @@ def test_verify_command_prints_error_when_vault_cannot_be_loaded(capsys):
 @pytest.mark.unit
 def test_delete_command_calls_delete_label_for_given_label():
     with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
-         patch('password_manager.cli.refresh_session'), \
          patch('password_manager.cli.delete_label') as mock_delete_label:
         run_cli_with_args(['prog', 'delete', 'github'])
         mock_delete_label.assert_called_once_with('testuser', 'github')
