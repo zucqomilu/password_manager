@@ -246,6 +246,6 @@ def start_agent(path: str) -> int | None:
 
 
 # Entry point of the spawned daemon: rebuild the listener from the fd start_agent() passed down.
-# It only runs in the child, which coverage does not measure; the start_agent() integration tests exercise it.
-if __name__ == "__main__":  # pragma: no cover
+# It only runs in the child; the start_agent() integration tests exercise it.
+if __name__ == "__main__":
     run_agent(socket.socket(fileno=int(sys.argv[1])))

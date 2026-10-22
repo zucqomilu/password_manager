@@ -1,9 +1,11 @@
 import ast
 from pathlib import Path
 
+import coverage
 import pytest
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = TESTS_DIR.parent
 LAYERS = {"unit", "integration", "e2e"}
 
 
@@ -30,3 +32,20 @@ def test_every_test_marker_matches_its_directory():
         for function in defined_tests(path)
         if layer_marks(function) != {path.relative_to(TESTS_DIR).parts[0]}
     ] == []
+
+
+# coverage reads the first config file it finds, so a stray .coveragerc would silently replace every setting in
+# pyproject.toml (source, omit) with its own
+@pytest.mark.unit
+def test_coverage_reads_its_settings_from_pyproject_toml(monkeypatch):
+    monkeypatch.chdir(PROJECT_ROOT)
+
+    assert coverage.Coverage().config.config_files_read == [str(PROJECT_ROOT / "pyproject.toml")]
+
+
+# The session agent runs as a daemon started with subprocess.Popen, so without this its code is never measured
+@pytest.mark.unit
+def test_pyproject_toml_enables_coverages_subprocess_measurement(monkeypatch):
+    monkeypatch.chdir(PROJECT_ROOT)
+
+    assert "subprocess" in coverage.Coverage().config.patch

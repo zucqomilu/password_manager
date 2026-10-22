@@ -38,7 +38,9 @@ addopts = "--strict-markers"
 
 [tool.coverage.run]
 source = ["src"]
+# Measures the session agent daemon too. It runs with cwd="/", so omit patterns must not be relative.
+patch = ["subprocess"]
 omit = [
     "*/__init__.py",
-    "src/password_manager/logger.py",
+    "*/password_manager/logger.py",
 ]
