@@ -41,3 +41,11 @@ def test_coverage_reads_its_settings_from_pyproject_toml(monkeypatch):
     monkeypatch.chdir(PROJECT_ROOT)
 
     assert coverage.Coverage().config.config_files_read == [str(PROJECT_ROOT / "pyproject.toml")]
+
+
+# The session agent runs as a daemon started with subprocess.Popen, so without this its code is never measured
+@pytest.mark.unit
+def test_pyproject_toml_enables_coverages_subprocess_measurement(monkeypatch):
+    monkeypatch.chdir(PROJECT_ROOT)
+
+    assert "subprocess" in coverage.Coverage().config.patch
