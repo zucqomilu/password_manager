@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from cryptography.fernet import Fernet, InvalidToken
 
 from .constants import CONNECTION_TIMEOUT, MAX_MESSAGE_SIZE, SESSION_TTL
+from .memory import harden_process
 
 
 # What the agent holds between requests. All None means locked.
@@ -245,7 +246,15 @@ def start_agent(path: str) -> int | None:
         ).pid
 
 
+# The daemon's startup: hardened before the first connection, so the key it only ever gets over the socket never
+# enters a process that can be dumped or read by other processes of the user. Kept apart from run_agent(), which
+# tests also run in a thread of the pytest process, so that process is never hardened.
+def run_daemon(listener: socket.socket) -> None:
+    harden_process()
+    run_agent(listener)
+
+
 # Entry point of the spawned daemon: rebuild the listener from the fd start_agent() passed down.
 # It only runs in the child; the start_agent() integration tests exercise it.
 if __name__ == "__main__":
-    run_agent(socket.socket(fileno=int(sys.argv[1])))
+    run_daemon(socket.socket(fileno=int(sys.argv[1])))

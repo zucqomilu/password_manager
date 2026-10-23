@@ -2,13 +2,14 @@ import os
 import socket
 import time
 from dataclasses import replace
+from unittest.mock import Mock, call
 
 import pytest
 from cryptography.fernet import Fernet
 
 from password_manager.agent import (
     AgentState, decode_message, encode_message, handle_request, is_authorized_peer, read_message, remaining_ttl,
-    serve_connection,
+    run_daemon, serve_connection,
 )
 from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
@@ -243,3 +244,18 @@ def test_serve_connection_keeps_the_new_state_when_the_reply_cannot_be_sent():
         client.sendall(encode_message({"cmd": "LOCK"}))
         client.close()
         assert serve_connection(state, server, now=1001.0) == (AgentState(), {"ok": True, "shutdown": True})
+
+
+# Both are faked: the real harden_process() would harden the pytest process, and the listener is never served.
+# One parent mock records the order, which is the point: hardening must be in place before the first connection,
+# so the key, which only ever arrives over the socket, never sits in a dumpable process.
+@pytest.mark.unit
+def test_the_agent_calls_harden_process_at_startup(monkeypatch):
+    calls = Mock()
+    monkeypatch.setattr("password_manager.agent.harden_process", calls.harden_process)
+    monkeypatch.setattr("password_manager.agent.run_agent", calls.run_agent)
+    listener = object()
+
+    run_daemon(listener)
+
+    assert calls.mock_calls == [call.harden_process(), call.run_agent(listener)]
