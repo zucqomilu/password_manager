@@ -58,19 +58,27 @@ def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentS
     return dispatch(expire(state, now), request, now)
 
 
+# Zeroes the key the state holds, if any: for the branches that replace or drop it
+def wipe_key(state: AgentState) -> None:
+    if state.key is not None:
+        wipe(state.key)
+
+
 def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
     # The request's str and the bytes from encode() are copies no code can zero; only the bytearray is wipeable.
     # Locked into RAM at once, so the held copy is never swapped; a refusal only logs a warning, the login still works.
+    # A key already held (a second login, maybe another user's) is zeroed, but only after every field of the request
+    # has been read: a malformed UNLOCK raises before the wipe, so the agent keeps its current key intact and usable.
     if request["cmd"] == "UNLOCK":
-        key = bytearray(request["key"].encode())
+        username, key = request["username"], bytearray(request["key"].encode())
+        wipe_key(state)
         lock_buffer(key)
-        return AgentState(username=request["username"], key=key, last_activity=now), {"ok": True}
+        return AgentState(username=username, key=key, last_activity=now), {"ok": True}
     # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit.
     # The old buffer is zeroed first, on purpose a side effect in this otherwise pure core: dropping it would leave
     # the key in memory until the garbage collector reuses it. One request at a time, so nothing else is using it.
     if request["cmd"] == "LOCK":
-        if state.key is not None:
-            wipe(state.key)
+        wipe_key(state)
         return AgentState(), {"ok": True, "shutdown": True}
     # Checked before any Fernet call or TTL arithmetic, so a locked agent answers cleanly instead of
     # failing on a missing key, and never says which user was logged in

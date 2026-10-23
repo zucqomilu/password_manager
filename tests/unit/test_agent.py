@@ -296,3 +296,17 @@ def test_the_agent_locks_its_key_buffer_with_lock_buffer_on_unlock(monkeypatch):
     # The very buffer the state holds, the one later wiped: locking a copy would leave the held key swappable
     (locked,), = [call_.args for call_ in lock_buffer.call_args_list]
     assert locked is state.key
+
+
+# A second login on a running agent, such as another user's: the old key must not linger next to the new one
+@pytest.mark.unit
+def test_the_agent_wipes_the_previous_key_when_unlock_replaces_it():
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}, now=1000.0)
+    old_key_buffer = state.key
+    new_key = Fernet.generate_key()
+
+    new_state, _ = handle_request(state, {"cmd": "UNLOCK", "username": "bob", "key": new_key.decode()}, now=1001.0)
+
+    assert old_key_buffer == bytearray(44)
+    # The new key is a buffer of its own, untouched by the wipe of the old one
+    assert (new_state.username, new_state.key) == ("bob", new_key)
