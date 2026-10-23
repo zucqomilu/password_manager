@@ -12,15 +12,16 @@ from dataclasses import dataclass, field, replace
 from cryptography.fernet import Fernet, InvalidToken
 
 from .constants import CONNECTION_TIMEOUT, MAX_MESSAGE_SIZE, SESSION_TTL
-from .memory import harden_process
+from .memory import harden_process, wipe
 
 
 # What the agent holds between requests. All None means locked.
-# repr=False keeps the key out of any log line, print or traceback that shows the state.
+# repr=False keeps the key out of any log line, print or traceback that shows the state. A bytearray, not bytes, so the
+# agent can zero it in place when the key is dropped.
 @dataclass(frozen=True)
 class AgentState:
     username: str | None = None
-    key: bytes | None = field(default=None, repr=False)
+    key: bytearray | None = field(default=None, repr=False)
     last_activity: float | None = None
 
 
@@ -54,10 +55,15 @@ def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentS
 
 
 def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
+    # The request's str and the bytes from encode() are copies no code can zero; only the bytearray is wipeable
     if request["cmd"] == "UNLOCK":
-        return AgentState(username=request["username"], key=request["key"].encode(), last_activity=now), {"ok": True}
-    # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit
+        return AgentState(username=request["username"], key=bytearray(request["key"].encode()), last_activity=now), {"ok": True}
+    # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit.
+    # The old buffer is zeroed first, on purpose a side effect in this otherwise pure core: dropping it would leave
+    # the key in memory until the garbage collector reuses it. One request at a time, so nothing else is using it.
     if request["cmd"] == "LOCK":
+        if state.key is not None:
+            wipe(state.key)
         return AgentState(), {"ok": True, "shutdown": True}
     # Checked before any Fernet call or TTL arithmetic, so a locked agent answers cleanly instead of
     # failing on a missing key, and never says which user was logged in
