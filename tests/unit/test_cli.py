@@ -270,3 +270,18 @@ def test_completion_command_prints_bash_script_that_never_falls_back_to_file_nam
         assert "complete -o nospace -o bashdefault -F _python_argcomplete pm" in script
         assert "-o default" not in script
         mock_load_session.assert_not_called()
+
+
+# Faked, like everywhere in the suite: the real harden_process() would harden the pytest process. One parent mock
+# records the order: the process is hardened before the first prompt, so the master password typed there never sits
+# in a dumpable process.
+@pytest.mark.unit
+def test_main_calls_harden_process_before_handling_commands(set_test_env, monkeypatch):
+    calls = Mock()
+    monkeypatch.setattr("password_manager.cli.harden_process", calls.harden_process)
+    monkeypatch.setattr("getpass.getpass", calls.getpass)
+    monkeypatch.setattr("password_manager.cli.register_user", calls.register_user)
+
+    cli.main(["register", "--username", "testuser"])
+
+    assert calls.mock_calls[:2] == [call.harden_process(), call.getpass("Choose a master password: ")]

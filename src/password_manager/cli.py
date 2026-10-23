@@ -2,6 +2,7 @@ import argparse
 import getpass
 import argcomplete
 from .logger import logger
+from .memory import harden_process
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
@@ -116,6 +117,9 @@ def run_command(parser, args, username, fernet):
         parser.print_help()
 
 def main(argv=None):
+    # First, before any prompt or key: the master password typed at login or register, the data key it unwraps and
+    # every decrypted password then live in a process that writes no core file and other processes cannot read
+    harden_process()
     parser = build_parser()
     argcomplete.autocomplete(parser, always_complete_options=False)
     args = parser.parse_args(argv)
