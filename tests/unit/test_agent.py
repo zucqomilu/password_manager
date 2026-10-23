@@ -2,14 +2,14 @@ import os
 import socket
 import time
 from dataclasses import replace
-from unittest.mock import Mock, call
+from unittest.mock import MagicMock, Mock, call
 
 import pytest
 from cryptography.fernet import Fernet
 
 from password_manager.agent import (
     AgentState, decode_message, encode_message, handle_data, handle_request, is_authorized_peer, read_message,
-    remaining_ttl, run_daemon, serve_connection,
+    remaining_ttl, run_agent, run_daemon, serve_connection,
 )
 from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
@@ -328,3 +328,24 @@ def test_a_malformed_unlock_leaves_the_agents_current_key_intact(request_):
 
     assert response == {"ok": False, "error": "malformed request"}
     assert (new_state.username, new_state.key) == ("alice", key)
+
+
+# No socket: the listener is faked, so the test controls when accept() gives up. One connection unlocks (the
+# faked serve_connection() hands back a state holding the key), then nothing arrives until the wait runs out:
+# TimeoutError, or BlockingIOError when the remaining TTL was already 0.
+@pytest.mark.unit
+@pytest.mark.parametrize("idle", [TimeoutError(), BlockingIOError()], ids=["timeout", "zero-timeout"])
+def test_run_agent_wipes_the_key_when_it_exits_idle_at_the_ttl(monkeypatch, idle):
+    key_buffer = bytearray(Fernet.generate_key())
+    monkeypatch.setattr(
+        "password_manager.agent.serve_connection",
+        lambda state, conn, now: (AgentState(username="alice", key=key_buffer, last_activity=now), {"ok": True}),
+    )
+    monkeypatch.setattr("password_manager.agent.os.unlink", Mock())
+    listener = Mock()
+    listener.accept.side_effect = [(MagicMock(), None), idle]
+
+    run_agent(listener)
+
+    # Zeroed before the process exits: freed memory is not wiped, and a swapped-out page would keep the key on disk
+    assert key_buffer == bytearray(44)

@@ -206,10 +206,12 @@ def accept_timeout(state: AgentState, now: float) -> float:
 # response signals shutdown. A while loop that rebinds result, against the no-reassignment convention on purpose:
 # recursion (one call per request) would hit Python's recursion limit after about 1000 requests and kill the session.
 # The finally removes the socket even if something raises, so a crashed agent never leaves a stale socket behind.
+# It zeroes a still-held key first (an idle exit at the TTL, or a crash), so no way out leaves the key in freed
+# memory; after a LOCK there is none left. result is bound before the try, so the finally can always see it.
 # Only accept() is covered by the timeout handling: serve_connection() handles its own timeouts.
 def run_agent(listener: socket.socket) -> None:
+    result = (AgentState(), {})
     try:
-        result = (AgentState(), {})
         while not result[1].get("shutdown"):
             listener.settimeout(accept_timeout(result[0], time.time()))
             try:
@@ -220,6 +222,7 @@ def run_agent(listener: socket.socket) -> None:
             with conn:
                 result = serve_connection(result[0], conn, time.time())
     finally:
+        wipe_key(result[0])
         os.unlink(listener.getsockname())
         listener.close()
 
