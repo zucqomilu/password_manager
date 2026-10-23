@@ -8,8 +8,8 @@ import pytest
 from cryptography.fernet import Fernet
 
 from password_manager.agent import (
-    AgentState, decode_message, encode_message, handle_request, is_authorized_peer, read_message, remaining_ttl,
-    run_daemon, serve_connection,
+    AgentState, decode_message, encode_message, handle_data, handle_request, is_authorized_peer, read_message,
+    remaining_ttl, run_daemon, serve_connection,
 )
 from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
@@ -310,3 +310,21 @@ def test_the_agent_wipes_the_previous_key_when_unlock_replaces_it():
     assert old_key_buffer == bytearray(44)
     # The new key is a buffer of its own, untouched by the wipe of the old one
     assert (new_state.username, new_state.key) == ("bob", new_key)
+
+
+# Through handle_data(), the path every request takes in the agent loop: it turns the error into a reply and keeps
+# the state. Each request fails on a different field; none may cost the logged-in user the key.
+@pytest.mark.unit
+@pytest.mark.parametrize("request_", [
+    {"cmd": "UNLOCK", "username": "bob"},
+    {"cmd": "UNLOCK", "key": "not-used"},
+    {"cmd": "UNLOCK", "username": "bob", "key": 5},
+], ids=["no-key", "no-username", "key-not-a-string"])
+def test_a_malformed_unlock_leaves_the_agents_current_key_intact(request_):
+    key = Fernet.generate_key()
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": key.decode()}, now=1000.0)
+
+    new_state, response = handle_data(state, encode_message(request_), now=1001.0)
+
+    assert response == {"ok": False, "error": "malformed request"}
+    assert (new_state.username, new_state.key) == ("alice", key)
