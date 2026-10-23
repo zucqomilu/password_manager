@@ -5,8 +5,11 @@ import resource
 
 from .logger import logger
 
-# The C library pm runs on, for mlock()
+# The C library pm runs on, for mlock() and prctl()
 libc = ctypes.CDLL(None)
+
+# From <linux/prctl.h>
+PR_SET_DUMPABLE = 4
 
 
 # Overwrites the buffer's own memory in place: an equal-length slice assignment never reallocates, so no copy of the
@@ -31,5 +34,9 @@ def lock_buffer(buffer: bytearray) -> bool:
 # Makes the running process (the agent, or a pm command) refuse to dump its memory, where the key and its copies
 # live. Soft and hard RLIMIT_CORE both 0: a crash writes no core file, and no code in the process can raise the
 # limit again. Lowering a limit is always permitted, so this cannot fail.
+# PR_SET_DUMPABLE 0 goes further: the kernel makes no core dump whatever core_pattern says, and other processes of
+# the same user can no longer ptrace this one or read its /proc/<pid>/mem, which covers the copies of the key no
+# wipe() can reach. The kernel reads prctl()'s arguments as unsigned longs, hence c_ulong. Setting 0 cannot fail.
 def harden_process() -> None:
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    libc.prctl(PR_SET_DUMPABLE, ctypes.c_ulong(0), ctypes.c_ulong(0), ctypes.c_ulong(0), ctypes.c_ulong(0))

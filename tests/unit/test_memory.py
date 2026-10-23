@@ -42,13 +42,28 @@ def test_lock_buffer_mlocks_a_bytearray_and_warns_instead_of_failing_when_not_pe
     assert caplog.messages == ([] if locked else ["Could not lock the key in memory; it may be written to swap."])
 
 
-# setrlimit() is faked: lowering the hard limit in the pytest process itself could not be undone
+# setrlimit() is faked: lowering the hard limit in the pytest process itself could not be undone; prctl() too
 @pytest.mark.unit
 def test_harden_process_sets_rlimit_core_to_0(monkeypatch):
     setrlimit = Mock()
     monkeypatch.setattr("password_manager.memory.resource.setrlimit", setrlimit)
+    monkeypatch.setattr("password_manager.memory.libc.prctl", Mock())
 
     harden_process()
 
     # Soft and hard limit both 0, so the process can never raise it again and a crash writes no core file
     setrlimit.assert_called_once_with(resource.RLIMIT_CORE, (0, 0))
+
+
+# prctl() is faked like setrlimit(): a non-dumpable pytest process would stay that way for the rest of the run
+@pytest.mark.unit
+def test_harden_process_sets_pr_set_dumpable_to_0(monkeypatch):
+    prctl = Mock(return_value=0)
+    monkeypatch.setattr("password_manager.memory.resource.setrlimit", Mock())
+    monkeypatch.setattr("password_manager.memory.libc.prctl", prctl)
+
+    harden_process()
+
+    # PR_SET_DUMPABLE is 4 in <linux/prctl.h>; its argument and the unused ones are passed as C unsigned longs, 0
+    (option, *arguments), = [call.args for call in prctl.call_args_list]
+    assert (option, [argument.value for argument in arguments]) == (4, [0, 0, 0, 0])
