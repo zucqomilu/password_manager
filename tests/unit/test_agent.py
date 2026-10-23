@@ -283,3 +283,16 @@ def test_the_agent_wipes_its_key_on_ttl_expiry():
 
     # Zeroed in place when expire() drops it, as on LOCK
     assert key_buffer == bytearray(44)
+
+
+# lock_buffer() is faked to see which buffer it gets; the real one is tested in tests/unit/test_memory.py
+@pytest.mark.unit
+def test_the_agent_locks_its_key_buffer_with_lock_buffer_on_unlock(monkeypatch):
+    lock_buffer = Mock(return_value=True)
+    monkeypatch.setattr("password_manager.agent.lock_buffer", lock_buffer)
+
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}, now=1000.0)
+
+    # The very buffer the state holds, the one later wiped: locking a copy would leave the held key swappable
+    (locked,), = [call_.args for call_ in lock_buffer.call_args_list]
+    assert locked is state.key

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from cryptography.fernet import Fernet, InvalidToken
 
 from .constants import CONNECTION_TIMEOUT, MAX_MESSAGE_SIZE, SESSION_TTL
-from .memory import harden_process, wipe
+from .memory import harden_process, lock_buffer, wipe
 
 
 # What the agent holds between requests. All None means locked.
@@ -59,9 +59,12 @@ def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentS
 
 
 def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
-    # The request's str and the bytes from encode() are copies no code can zero; only the bytearray is wipeable
+    # The request's str and the bytes from encode() are copies no code can zero; only the bytearray is wipeable.
+    # Locked into RAM at once, so the held copy is never swapped; a refusal only logs a warning, the login still works.
     if request["cmd"] == "UNLOCK":
-        return AgentState(username=request["username"], key=bytearray(request["key"].encode()), last_activity=now), {"ok": True}
+        key = bytearray(request["key"].encode())
+        lock_buffer(key)
+        return AgentState(username=request["username"], key=key, last_activity=now), {"ok": True}
     # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit.
     # The old buffer is zeroed first, on purpose a side effect in this otherwise pure core: dropping it would leave
     # the key in memory until the garbage collector reuses it. One request at a time, so nothing else is using it.
