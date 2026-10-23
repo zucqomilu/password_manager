@@ -1,6 +1,7 @@
 # Best-effort hardening of the memory that holds the data key. Python and cryptography keep copies of their own
 # (str, bytes, Fernet's derived keys) that no code here can reach, so this narrows exposure; it does not remove it.
 import ctypes
+import resource
 
 from .logger import logger
 
@@ -25,3 +26,10 @@ def lock_buffer(buffer: bytearray) -> bool:
         return True
     logger.warning("Could not lock the key in memory; it may be written to swap.")
     return False
+
+
+# Makes the running process (the agent, or a pm command) refuse to dump its memory, where the key and its copies
+# live. Soft and hard RLIMIT_CORE both 0: a crash writes no core file, and no code in the process can raise the
+# limit again. Lowering a limit is always permitted, so this cannot fail.
+def harden_process() -> None:
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
