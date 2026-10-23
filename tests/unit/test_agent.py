@@ -271,3 +271,15 @@ def test_the_agent_wipes_its_key_on_lock():
 
     # The buffer the old state held is zeroed in place, not merely dropped for the garbage collector to free later
     assert key_buffer == bytearray(44)
+
+
+# Any request after the TTL finds the key expired; STATUS is used because it never extends the session itself
+@pytest.mark.unit
+def test_the_agent_wipes_its_key_on_ttl_expiry():
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}, now=1000.0)
+    key_buffer = state.key
+
+    assert handle_request(state, {"cmd": "STATUS"}, now=1000.0 + SESSION_TTL) == (AgentState(), {"ok": False, "error": "locked"})
+
+    # Zeroed in place when expire() drops it, as on LOCK
+    assert key_buffer == bytearray(44)

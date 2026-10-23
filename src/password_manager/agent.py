@@ -33,9 +33,13 @@ def decrypt_response(key: bytes, token: str) -> dict:
         return {"ok": False, "error": "invalid token"}
 
 
-# Drop the key once it has been idle for SESSION_TTL (same >= boundary as the keyring session)
+# Drop the key once it has been idle for SESSION_TTL (same >= boundary as the keyring session).
+# Zeroed in place first, as on LOCK: every request (also a malformed one, or a silent peer) passes through here.
 def expire(state: AgentState, now: float) -> AgentState:
-    return AgentState() if state.key is not None and now - state.last_activity >= SESSION_TTL else state
+    if state.key is not None and now - state.last_activity >= SESSION_TTL:
+        wipe(state.key)
+        return AgentState()
+    return state
 
 
 # Seconds until the held key expires; the server loop uses it as its timeout so an idle agent exits on time
