@@ -223,3 +223,15 @@ def test_load_session_returns_none_after_ttl(set_test_env, test_clock):
     test_clock[0] += 15 * 60
 
     assert load_session() is None
+
+
+# 116 bytes: past the 107 a Linux sun_path holds (108 with its NUL). Checked before any socket call, so nothing is
+# started, and the reason names the setting to change instead of "could not start the session agent".
+@pytest.mark.unit
+def test_save_session_fails_with_a_clear_reason_when_the_socket_path_exceeds_the_unix_limit(set_test_env, fake_agent, monkeypatch):
+    monkeypatch.setenv("PM_AGENT_SOCKET", "/tmp/" + "x" * 100 + "/agent.sock")
+
+    with pytest.raises(ValueError, match=r"^the session agent socket path is too long \(116 bytes, at most 107\); set a shorter PM_AGENT_SOCKET$"):
+        save_session("testuser", Fernet.generate_key())
+
+    assert fake_agent["calls"] == []
