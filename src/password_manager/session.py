@@ -114,12 +114,21 @@ def load_session() -> tuple[str, AgentCipher] | None:
 
 
 # LOCK is sent whatever STATUS says, so the key always leaves the agent's memory; STATUS only picks the message.
-# With no agent running, both requests return None and nothing is started. The legacy entry goes through
-# delete_legacy_session(), so an unreachable keyring cannot break logout either.
+# With no agent running, both requests return None and nothing is started. The legacy entry goes first, through
+# delete_legacy_session(), so neither an unreachable keyring nor a bad socket path can keep an old raw key there.
+# A socket path the kernel would reject reaches no agent: "Logout failed", never "No session to clear.", because the
+# agent at the usual path may still hold the key.
 def clear_session():
+    delete_legacy_session()
+    try:
+        check_socket_path(get_socket_path())
+    except ValueError as error:
+        logger.warning(f"Logout failed: {error}")
+        print(f"Logout failed: {error}")
+        return
+
     status = agent.send_request(get_socket_path(), {"cmd": "STATUS"})
     agent.send_request(get_socket_path(), {"cmd": "LOCK"})
-    delete_legacy_session()
 
     if status is not None and status["ok"]:
         logger.info("Session cleared.")

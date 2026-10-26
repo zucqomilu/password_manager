@@ -235,3 +235,17 @@ def test_save_session_fails_with_a_clear_reason_when_the_socket_path_exceeds_the
         save_session("testuser", Fernet.generate_key())
 
     assert fake_agent["calls"] == []
+
+
+# The real socket call raises OSError("AF_UNIX path too long") and logout ends in a traceback. No agent can listen at
+# such a path, so there is nothing to lock: the reason is reported, as for login, and no request is sent.
+@pytest.mark.unit
+def test_clear_session_reports_a_too_long_socket_path_instead_of_crashing(set_test_env, fake_agent, monkeypatch, capsys):
+    monkeypatch.setenv("PM_AGENT_SOCKET", "/tmp/" + "x" * 100 + "/agent.sock")
+
+    clear_session()
+
+    assert capsys.readouterr().out == (
+        "Logout failed: the session agent socket path is too long (116 bytes, at most 107); set a shorter PM_AGENT_SOCKET\n"
+    )
+    assert fake_agent["calls"] == []
