@@ -125,6 +125,8 @@ A session is held by a small background process, the **session agent**, in the s
 
 The agent listens on a Unix socket at `$XDG_RUNTIME_DIR/password_manager/agent.sock` (or in the data directory when `XDG_RUNTIME_DIR` is not set; `PM_AGENT_SOCKET` overrides both). The directory is `0700`, the socket `0600`, and the agent only answers processes running as the same user.
 
+A Unix socket path can be at most 107 bytes long. If yours is longer (a long `PM_AGENT_SOCKET`, or a long data directory path without `XDG_RUNTIME_DIR`), `login` and `logout` stop and say so; set a shorter `PM_AGENT_SOCKET`.
+
 The session uses a **15-minute time-to-live (TTL)**.
 
 ### Session lifecycle
@@ -242,6 +244,7 @@ The log contains operational information useful for debugging and auditing appli
 
 ## Requirements
 
+* Linux (the session agent and the memory hardening use Linux-only system calls; on any other platform `pm` stops with "pm only supports Linux.")
 * Python 3.12 or newer (developed on 3.14)
 * `cryptography`
 * `pyperclip`
@@ -736,7 +739,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring or the real session agent: the test setup replaces the keyring with an inactive backend and points the agent socket into a throwaway directory.
 
-The current test suite contains **396 tests**.
+The current test suite contains **401 tests**.
 
 Coverage can be generated with:
 

@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -7,7 +8,7 @@ from keyring.errors import KeyringError, PasswordDeleteError
 from cryptography.fernet import InvalidToken
 
 from . import agent
-from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, get_socket_path
+from .constants import KEYRING_ACCOUNT, KEYRING_SERVICE, MAX_SOCKET_PATH, get_socket_path
 from .logger import logger
 
 
@@ -35,9 +36,19 @@ def delete_legacy_session():
         logger.warning("Could not reach the keyring to remove the legacy session entry.")
 
 
-# The legacy entry goes first, so even a login that then fails removes it
+# A path the kernel would reject fails with the reason and the fix, before any socket call. Measured in bytes, as
+# the kernel does, so a non-ASCII directory name counts at its encoded length.
+def check_socket_path(path: str):
+    size = len(os.fsencode(path))
+    if size > MAX_SOCKET_PATH:
+        raise ValueError(f"the session agent socket path is too long ({size} bytes, at most {MAX_SOCKET_PATH}); set a shorter PM_AGENT_SOCKET")
+
+
+# The legacy entry goes first, so even a login that then fails removes it. A bad socket path stops the login
+# before any agent is started or sent the key.
 def save_session(username: str, key: bytes):
     delete_legacy_session()
+    check_socket_path(get_socket_path())
 
     # Login only succeeds once the agent holds the key. Raised as ValueError, so main() prints "Login failed: ..."
     # through its existing handler instead of a traceback or a false "Login successful".
@@ -103,12 +114,21 @@ def load_session() -> tuple[str, AgentCipher] | None:
 
 
 # LOCK is sent whatever STATUS says, so the key always leaves the agent's memory; STATUS only picks the message.
-# With no agent running, both requests return None and nothing is started. The legacy entry goes through
-# delete_legacy_session(), so an unreachable keyring cannot break logout either.
+# With no agent running, both requests return None and nothing is started. The legacy entry goes first, through
+# delete_legacy_session(), so neither an unreachable keyring nor a bad socket path can keep an old raw key there.
+# A socket path the kernel would reject reaches no agent: "Logout failed", never "No session to clear.", because the
+# agent at the usual path may still hold the key.
 def clear_session():
+    delete_legacy_session()
+    try:
+        check_socket_path(get_socket_path())
+    except ValueError as error:
+        logger.warning(f"Logout failed: {error}")
+        print(f"Logout failed: {error}")
+        return
+
     status = agent.send_request(get_socket_path(), {"cmd": "STATUS"})
     agent.send_request(get_socket_path(), {"cmd": "LOCK"})
-    delete_legacy_session()
 
     if status is not None and status["ok"]:
         logger.info("Session cleared.")

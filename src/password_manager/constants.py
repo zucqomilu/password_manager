@@ -31,6 +31,9 @@ def get_runtime_dir():
 def get_socket_path():
     return os.environ.get("PM_AGENT_SOCKET") or os.path.join(get_runtime_dir(), "agent.sock")
 
+# Longest socket path the kernel accepts, in bytes: Linux's sun_path holds 108, including the closing NUL
+MAX_SOCKET_PATH = 107
+
 # Keyring
 KEYRING_SERVICE = "password_manager"
 KEYRING_ACCOUNT = "session"
