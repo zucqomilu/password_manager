@@ -12,14 +12,16 @@ from dataclasses import dataclass, field, replace
 from cryptography.fernet import Fernet, InvalidToken
 
 from .constants import CONNECTION_TIMEOUT, MAX_MESSAGE_SIZE, SESSION_TTL
+from .memory import harden_process, lock_buffer, wipe
 
 
 # What the agent holds between requests. All None means locked.
-# repr=False keeps the key out of any log line, print or traceback that shows the state.
+# repr=False keeps the key out of any log line, print or traceback that shows the state. A bytearray, not bytes, so the
+# agent can zero it in place when the key is dropped.
 @dataclass(frozen=True)
 class AgentState:
     username: str | None = None
-    key: bytes | None = field(default=None, repr=False)
+    key: bytearray | None = field(default=None, repr=False)
     last_activity: float | None = None
 
 
@@ -31,9 +33,13 @@ def decrypt_response(key: bytes, token: str) -> dict:
         return {"ok": False, "error": "invalid token"}
 
 
-# Drop the key once it has been idle for SESSION_TTL (same >= boundary as the keyring session)
+# Drop the key once it has been idle for SESSION_TTL (same >= boundary as the keyring session).
+# Zeroed in place first, as on LOCK: every request (also a malformed one, or a silent peer) passes through here.
 def expire(state: AgentState, now: float) -> AgentState:
-    return AgentState() if state.key is not None and now - state.last_activity >= SESSION_TTL else state
+    if state.key is not None and now - state.last_activity >= SESSION_TTL:
+        wipe(state.key)
+        return AgentState()
+    return state
 
 
 # Seconds until the held key expires; the server loop uses it as its timeout so an idle agent exits on time
@@ -52,11 +58,27 @@ def handle_request(state: AgentState, request: dict, now: float) -> tuple[AgentS
     return dispatch(expire(state, now), request, now)
 
 
+# Zeroes the key the state holds, if any: for the branches that replace or drop it
+def wipe_key(state: AgentState) -> None:
+    if state.key is not None:
+        wipe(state.key)
+
+
 def dispatch(state: AgentState, request: dict, now: float) -> tuple[AgentState, dict]:
+    # The request's str and the bytes from encode() are copies no code can zero; only the bytearray is wipeable.
+    # Locked into RAM at once, so the held copy is never swapped; a refusal only logs a warning, the login still works.
+    # A key already held (a second login, maybe another user's) is zeroed, but only after every field of the request
+    # has been read: a malformed UNLOCK raises before the wipe, so the agent keeps its current key intact and usable.
     if request["cmd"] == "UNLOCK":
-        return AgentState(username=request["username"], key=request["key"].encode(), last_activity=now), {"ok": True}
-    # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit
+        username, key = request["username"], bytearray(request["key"].encode())
+        wipe_key(state)
+        lock_buffer(key)
+        return AgentState(username=username, key=key, last_activity=now), {"ok": True}
+    # Drops the key whatever the state; shutdown tells the server loop to reply, close the socket and exit.
+    # The old buffer is zeroed first, on purpose a side effect in this otherwise pure core: dropping it would leave
+    # the key in memory until the garbage collector reuses it. One request at a time, so nothing else is using it.
     if request["cmd"] == "LOCK":
+        wipe_key(state)
         return AgentState(), {"ok": True, "shutdown": True}
     # Checked before any Fernet call or TTL arithmetic, so a locked agent answers cleanly instead of
     # failing on a missing key, and never says which user was logged in
@@ -184,10 +206,12 @@ def accept_timeout(state: AgentState, now: float) -> float:
 # response signals shutdown. A while loop that rebinds result, against the no-reassignment convention on purpose:
 # recursion (one call per request) would hit Python's recursion limit after about 1000 requests and kill the session.
 # The finally removes the socket even if something raises, so a crashed agent never leaves a stale socket behind.
+# It zeroes a still-held key first (an idle exit at the TTL, or a crash), so no way out leaves the key in freed
+# memory; after a LOCK there is none left. result is bound before the try, so the finally can always see it.
 # Only accept() is covered by the timeout handling: serve_connection() handles its own timeouts.
 def run_agent(listener: socket.socket) -> None:
+    result = (AgentState(), {})
     try:
-        result = (AgentState(), {})
         while not result[1].get("shutdown"):
             listener.settimeout(accept_timeout(result[0], time.time()))
             try:
@@ -198,6 +222,7 @@ def run_agent(listener: socket.socket) -> None:
             with conn:
                 result = serve_connection(result[0], conn, time.time())
     finally:
+        wipe_key(result[0])
         os.unlink(listener.getsockname())
         listener.close()
 
@@ -245,7 +270,15 @@ def start_agent(path: str) -> int | None:
         ).pid
 
 
+# The daemon's startup: hardened before the first connection, so the key it only ever gets over the socket never
+# enters a process that can be dumped or read by other processes of the user. Kept apart from run_agent(), which
+# tests also run in a thread of the pytest process, so that process is never hardened.
+def run_daemon(listener: socket.socket) -> None:
+    harden_process()
+    run_agent(listener)
+
+
 # Entry point of the spawned daemon: rebuild the listener from the fd start_agent() passed down.
 # It only runs in the child; the start_agent() integration tests exercise it.
 if __name__ == "__main__":
-    run_agent(socket.socket(fileno=int(sys.argv[1])))
+    run_daemon(socket.socket(fileno=int(sys.argv[1])))

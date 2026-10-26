@@ -33,7 +33,7 @@ def wait_for_exit(pid, timeout=5):
 def entry_point_line():
     return next(
         number for number, line in enumerate(Path(AGENT_FILE).read_text().splitlines(), 1)
-        if "run_agent(socket.socket(fileno=" in line
+        if "socket.socket(fileno=int(sys.argv[1]))" in line
     )
 
 

@@ -50,6 +50,13 @@ def no_real_keyring():
     keyring.set_keyring(previous)
 
 
+# main() hardens its process, and every in-process main() call would otherwise harden pytest itself, with a core
+# limit it could never raise again. Tests that check the hardening set their own mock over this one.
+@pytest.fixture(autouse=True)
+def no_process_hardening(monkeypatch):
+    monkeypatch.setattr("password_manager.cli.harden_process", lambda: None)
+
+
 # Helper to generate valid base64 strings
 def b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode()

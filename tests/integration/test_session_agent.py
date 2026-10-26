@@ -7,6 +7,7 @@ import pytest
 
 from password_manager.agent import create_listener, run_agent, send_request
 from password_manager.cli import main
+from password_manager.memory import lock_buffer
 
 
 # Files and agent socket in a throwaway dir, with a real agent daemon instead of the fake one set_test_env gives.
@@ -90,3 +91,27 @@ def test_an_idle_agent_exits_after_the_ttl_without_receiving_any_request(real_ag
     assert not os.path.exists(real_agent_socket)
     main(["get", "github"])
     assert capsys.readouterr().out == "You are not logged in. Please run `login` first.\n"
+
+
+# The agent runs in a thread so the test can reach its key buffer at all: the real daemon is non-dumpable, so no
+# other process can read its memory, which is the hardening this feature adds. The buffer is caught on its way
+# through the real lock_buffer(); everything else is real: socket, mlock, encryption, LOCK and the wipe.
+# Only the agent's own buffer can be checked: the copies inside Python and cryptography are out of reach.
+@pytest.mark.integration
+def test_after_lock_the_agents_key_buffer_is_all_zeros(real_agent_socket, monkeypatch, capsys):
+    held_buffers = []
+    monkeypatch.setattr("password_manager.agent.lock_buffer", lambda buffer: held_buffers.append(buffer) or lock_buffer(buffer))
+    main(["register", "--username", "alice", "--password", "correct horse battery"])
+    agent_thread = threading.Thread(target=run_agent, args=(create_listener(real_agent_socket),), daemon=True)
+    agent_thread.start()
+    main(["login", "--username", "alice", "--password", "correct horse battery"])
+    main(["set", "github", "--password", "supersecurepass1"])
+    (key_buffer,) = held_buffers
+    # A real key, in use: set encrypted with it
+    assert key_buffer != bytearray(len(key_buffer))
+
+    main(["logout"])
+    agent_thread.join(timeout=2)
+
+    assert not agent_thread.is_alive()
+    assert key_buffer == bytearray(44)

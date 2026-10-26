@@ -21,6 +21,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * `pm verify` checks that every stored password and login still decrypts
 * Shell tab-completion for commands, options, labels and tags (via `argcomplete`), without decrypting anything
 * Sessions held by a per-user agent process: the data key stays in memory, never on disk or in the keyring
+* Best-effort memory hardening: no core dumps, no memory reads by other processes, the agent's key kept out of swap and zeroed when the session ends
 * 15-minute session expiration, extended each time a password is encrypted or decrypted
 * JSON-based storage
 * Storage validation to detect malformed or corrupted data
@@ -131,12 +132,23 @@ The session uses a **15-minute time-to-live (TTL)**.
 1. `pm login` unwraps the data key (or derives it for a not-yet-upgraded v1 account), starts the agent if none is running, and hands it the key.
 2. Commands ask the agent whether a session is active, then use it to encrypt and decrypt.
 3. Each successful encryption or decryption extends the session. Commands that do not use the key (`delete`, `remove`) do not.
-4. After 15 minutes without use, the agent drops the key and exits.
-5. `pm logout` tells the agent to drop the key and exit.
+4. After 15 minutes without use, the agent zeroes the key and exits.
+5. `pm logout` tells the agent to zero the key and exit.
 
 If the session ends while a command is running, the command stops without saving anything and asks you to log in again.
 
 Older versions kept the key in the operating system's keyring between commands. The first login with this version removes that entry.
+
+### Memory hardening
+
+On Linux, the agent and every `pm` command harden their own process before handling anything secret:
+
+* **No core dumps.** The core-file limit is set to 0, so a crash never writes the process's memory to disk.
+* **Not dumpable.** Other processes running as your user (but not root) cannot attach a debugger (`ptrace`) or read the process's memory through `/proc`. This covers every copy of the key in the process, not only the agent's own.
+* **Kept out of swap.** The agent locks its copy of the key into RAM with `mlock`. If the system refuses (for example, over the locked-memory limit), the session still works and a warning goes to `vault.log`.
+* **Zeroed when the session ends.** The agent overwrites its copy of the key on logout, when the session expires, when a new login replaces it, and when it exits.
+
+This is best effort. Python and the `cryptography` library keep short-lived copies of the key of their own (for example, while decoding a request or encrypting a value) that cannot be zeroed from Python. The hardening narrows how long and where the key can be found; it does not remove every copy.
 
 ## Storage
 
@@ -671,11 +683,13 @@ password_manager/
 ├── src/
 │   └── password_manager/
 │       ├── __init__.py
+│       ├── agent.py
 │       ├── cli.py
 │       ├── constants.py
 │       ├── core.py
 │       ├── crypto.py
 │       ├── logger.py
+│       ├── memory.py
 │       ├── session.py
 │       ├── storage.py
 │       ├── user.py
@@ -697,6 +711,7 @@ password_manager/
 | `core.py`             | Password generation and vault operations           |
 | `crypto.py`           | Salt generation and cryptographic key derivation   |
 | `logger.py`           | Application logging                                |
+| `memory.py`           | Process hardening, locking and zeroing the key     |
 | `session.py`          | Login, logout and the agent-backed cipher          |
 | `storage.py`          | Reading, writing, and backing up persistent data   |
 | `user.py`             | User registration and authentication               |
@@ -721,7 +736,7 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring or the real session agent: the test setup replaces the keyring with an inactive backend and points the agent socket into a throwaway directory.
 
-The current test suite contains **375 tests**.
+The current test suite contains **396 tests**.
 
 Coverage can be generated with:
 
@@ -788,7 +803,7 @@ Users should protect:
 
 ### Session key
 
-The Fernet encryption key is held only in the session agent's memory while a session is active. Any process running as your user can ask the agent to decrypt values during that time, the same trust model as `ssh-agent`.
+The Fernet encryption key is held only in the session agent's memory while a session is active. Any process running as your user can ask the agent to decrypt values during that time, the same trust model as `ssh-agent`. Such a process cannot read the agent's memory directly, though: see [Memory hardening](#memory-hardening), including its limits.
 
 Sessions expire after 15 minutes without use.
 
@@ -811,7 +826,7 @@ The project is actively being developed. Current limitations include:
 
 The project is currently under active development.
 
-Recent development has focused on moving the session key out of the operating-system keyring into a per-user session agent, along with tag-based organization, filtering, and removal for password entries.
+Recent development has focused on moving the session key out of the operating-system keyring into a per-user session agent and hardening the memory that holds it, along with tag-based organization, filtering, and removal for password entries.
 
 Future development will focus on improving the security model, usability, storage architecture, and production readiness of the application.
 

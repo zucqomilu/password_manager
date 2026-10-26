@@ -2,13 +2,14 @@ import os
 import socket
 import time
 from dataclasses import replace
+from unittest.mock import MagicMock, Mock, call
 
 import pytest
 from cryptography.fernet import Fernet
 
 from password_manager.agent import (
-    AgentState, decode_message, encode_message, handle_request, is_authorized_peer, read_message, remaining_ttl,
-    serve_connection,
+    AgentState, decode_message, encode_message, handle_data, handle_request, is_authorized_peer, read_message,
+    remaining_ttl, run_agent, run_daemon, serve_connection,
 )
 from password_manager.constants import MAX_MESSAGE_SIZE, SESSION_TTL
 
@@ -49,7 +50,7 @@ def test_handle_request_decrypt_returns_plaintext_for_a_valid_token():
     "not-a-token",
 ], ids=["token from another key", "garbage"])
 def test_handle_request_decrypt_returns_an_error_for_an_invalid_token(token):
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     assert handle_request(state, {"cmd": "DECRYPT", "token": token}, now=1001.0) == (state, {"ok": False, "error": "invalid token"})
 
 
@@ -64,7 +65,7 @@ def test_handle_request_returns_locked_for_encrypt_and_decrypt_when_no_key_is_he
 
 @pytest.mark.unit
 def test_handle_request_locks_when_idle_time_exceeds_session_ttl():
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     assert handle_request(state, {"cmd": "ENCRYPT", "plaintext": "test-only-pass-1"}, now=1000.0 + SESSION_TTL) == (
         AgentState(), {"ok": False, "error": "locked"},
     )
@@ -83,13 +84,13 @@ def test_handle_request_refreshes_last_activity_after_a_successful_operation(cmd
 
 @pytest.mark.unit
 def test_handle_request_lock_clears_the_key_and_signals_shutdown():
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     assert handle_request(state, {"cmd": "LOCK"}, now=1001.0) == (AgentState(), {"ok": True, "shutdown": True})
 
 
 @pytest.mark.unit
 def test_handle_request_status_reports_the_user_and_remaining_ttl_without_the_key():
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     assert handle_request(state, {"cmd": "STATUS"}, now=1100.0) == (
         state, {"ok": True, "username": "alice", "remaining_ttl": SESSION_TTL - 100.0},
     )
@@ -103,13 +104,13 @@ def test_handle_request_status_reports_locked_when_no_key_is_held():
 @pytest.mark.unit
 @pytest.mark.parametrize("cmd", ["FOO", "unlock", ""])
 def test_handle_request_rejects_unknown_commands(cmd):
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     assert handle_request(state, {"cmd": cmd}, now=1100.0) == (state, {"ok": False, "error": "unknown command"})
 
 
 @pytest.mark.unit
 def test_remaining_ttl_returns_the_seconds_until_expiry():
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     assert remaining_ttl(state, now=1100.0) == SESSION_TTL - 100.0
 
 
@@ -184,7 +185,7 @@ def fail_if_called(*args):
 
 @pytest.mark.unit
 def test_serve_connection_closes_an_unauthorized_peers_connection_without_reading_its_request(monkeypatch):
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     other_uid = os.getuid() + 1
     server, client = socket.socketpair()
     with server, client:
@@ -210,7 +211,7 @@ def test_serve_connection_closes_an_unauthorized_peers_connection_without_readin
 ], ids=["not json", "not utf-8", "not an object", "no cmd", "unlock without key", "plaintext not a string",
         "token not a string", "too large"])
 def test_serve_connection_answers_a_malformed_request_with_an_error_and_keeps_the_state(data):
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     server, client = socket.socketpair()
     with server, client:
         server.settimeout(1)
@@ -223,7 +224,7 @@ def test_serve_connection_answers_a_malformed_request_with_an_error_and_keeps_th
 @pytest.mark.unit
 def test_serve_connection_gives_up_on_a_peer_that_sends_nothing_within_a_short_timeout(monkeypatch):
     monkeypatch.setattr("password_manager.agent.CONNECTION_TIMEOUT", 0.1)
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     server, client = socket.socketpair()
     with server, client:
         # Only a guard against hanging the suite; the elapsed check proves CONNECTION_TIMEOUT ended the wait
@@ -235,7 +236,7 @@ def test_serve_connection_gives_up_on_a_peer_that_sends_nothing_within_a_short_t
 
 @pytest.mark.unit
 def test_serve_connection_keeps_the_new_state_when_the_reply_cannot_be_sent():
-    state = AgentState(username="alice", key=Fernet.generate_key(), last_activity=1000.0)
+    state = AgentState(username="alice", key=bytearray(Fernet.generate_key()), last_activity=1000.0)
     server, client = socket.socketpair()
     with server, client:
         server.settimeout(1)
@@ -243,3 +244,108 @@ def test_serve_connection_keeps_the_new_state_when_the_reply_cannot_be_sent():
         client.sendall(encode_message({"cmd": "LOCK"}))
         client.close()
         assert serve_connection(state, server, now=1001.0) == (AgentState(), {"ok": True, "shutdown": True})
+
+
+# Both are faked: the real harden_process() would harden the pytest process, and the listener is never served.
+# One parent mock records the order, which is the point: hardening must be in place before the first connection,
+# so the key, which only ever arrives over the socket, never sits in a dumpable process.
+@pytest.mark.unit
+def test_the_agent_calls_harden_process_at_startup(monkeypatch):
+    calls = Mock()
+    monkeypatch.setattr("password_manager.agent.harden_process", calls.harden_process)
+    monkeypatch.setattr("password_manager.agent.run_agent", calls.run_agent)
+    listener = object()
+
+    run_daemon(listener)
+
+    assert calls.mock_calls == [call.harden_process(), call.run_agent(listener)]
+
+
+# Through UNLOCK, as in the real agent: the test only passes if the key the agent holds is a buffer it can zero
+@pytest.mark.unit
+def test_the_agent_wipes_its_key_on_lock():
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}, now=1000.0)
+    key_buffer = state.key
+
+    handle_request(state, {"cmd": "LOCK"}, now=1001.0)
+
+    # The buffer the old state held is zeroed in place, not merely dropped for the garbage collector to free later
+    assert key_buffer == bytearray(44)
+
+
+# Any request after the TTL finds the key expired; STATUS is used because it never extends the session itself
+@pytest.mark.unit
+def test_the_agent_wipes_its_key_on_ttl_expiry():
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}, now=1000.0)
+    key_buffer = state.key
+
+    assert handle_request(state, {"cmd": "STATUS"}, now=1000.0 + SESSION_TTL) == (AgentState(), {"ok": False, "error": "locked"})
+
+    # Zeroed in place when expire() drops it, as on LOCK
+    assert key_buffer == bytearray(44)
+
+
+# lock_buffer() is faked to see which buffer it gets; the real one is tested in tests/unit/test_memory.py
+@pytest.mark.unit
+def test_the_agent_locks_its_key_buffer_with_lock_buffer_on_unlock(monkeypatch):
+    lock_buffer = Mock(return_value=True)
+    monkeypatch.setattr("password_manager.agent.lock_buffer", lock_buffer)
+
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}, now=1000.0)
+
+    # The very buffer the state holds, the one later wiped: locking a copy would leave the held key swappable
+    (locked,), = [call_.args for call_ in lock_buffer.call_args_list]
+    assert locked is state.key
+
+
+# A second login on a running agent, such as another user's: the old key must not linger next to the new one
+@pytest.mark.unit
+def test_the_agent_wipes_the_previous_key_when_unlock_replaces_it():
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": Fernet.generate_key().decode()}, now=1000.0)
+    old_key_buffer = state.key
+    new_key = Fernet.generate_key()
+
+    new_state, _ = handle_request(state, {"cmd": "UNLOCK", "username": "bob", "key": new_key.decode()}, now=1001.0)
+
+    assert old_key_buffer == bytearray(44)
+    # The new key is a buffer of its own, untouched by the wipe of the old one
+    assert (new_state.username, new_state.key) == ("bob", new_key)
+
+
+# Through handle_data(), the path every request takes in the agent loop: it turns the error into a reply and keeps
+# the state. Each request fails on a different field; none may cost the logged-in user the key.
+@pytest.mark.unit
+@pytest.mark.parametrize("request_", [
+    {"cmd": "UNLOCK", "username": "bob"},
+    {"cmd": "UNLOCK", "key": "not-used"},
+    {"cmd": "UNLOCK", "username": "bob", "key": 5},
+], ids=["no-key", "no-username", "key-not-a-string"])
+def test_a_malformed_unlock_leaves_the_agents_current_key_intact(request_):
+    key = Fernet.generate_key()
+    state, _ = handle_request(AgentState(), {"cmd": "UNLOCK", "username": "alice", "key": key.decode()}, now=1000.0)
+
+    new_state, response = handle_data(state, encode_message(request_), now=1001.0)
+
+    assert response == {"ok": False, "error": "malformed request"}
+    assert (new_state.username, new_state.key) == ("alice", key)
+
+
+# No socket: the listener is faked, so the test controls when accept() gives up. One connection unlocks (the
+# faked serve_connection() hands back a state holding the key), then nothing arrives until the wait runs out:
+# TimeoutError, or BlockingIOError when the remaining TTL was already 0.
+@pytest.mark.unit
+@pytest.mark.parametrize("idle", [TimeoutError(), BlockingIOError()], ids=["timeout", "zero-timeout"])
+def test_run_agent_wipes_the_key_when_it_exits_idle_at_the_ttl(monkeypatch, idle):
+    key_buffer = bytearray(Fernet.generate_key())
+    monkeypatch.setattr(
+        "password_manager.agent.serve_connection",
+        lambda state, conn, now: (AgentState(username="alice", key=key_buffer, last_activity=now), {"ok": True}),
+    )
+    monkeypatch.setattr("password_manager.agent.os.unlink", Mock())
+    listener = Mock()
+    listener.accept.side_effect = [(MagicMock(), None), idle]
+
+    run_agent(listener)
+
+    # Zeroed before the process exits: freed memory is not wiped, and a swapped-out page would keep the key on disk
+    assert key_buffer == bytearray(44)
