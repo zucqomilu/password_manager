@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 import time
 from unittest.mock import patch
@@ -115,3 +116,22 @@ def test_after_lock_the_agents_key_buffer_is_all_zeros(real_agent_socket, monkey
 
     assert not agent_thread.is_alive()
     assert key_buffer == bytearray(44)
+
+
+# Real main(), real socket code, no fake agent: the only way to see that no agent is started is that nothing was
+# created on disk. start_agent() makes the socket dir before it spawns the daemon, so a missing dir means no daemon.
+@pytest.mark.integration
+def test_login_with_a_too_long_pm_agent_socket_prints_the_reason_and_starts_no_agent(real_agent_socket, monkeypatch, capsys, tmp_path):
+    long_socket_path = tmp_path / ("x" * 80) / "agent.sock"
+    assert len(os.fsencode(long_socket_path)) > 107
+    main(["register", "--username", "alice", "--password", "correct horse battery"])
+    monkeypatch.setenv("PM_AGENT_SOCKET", str(long_socket_path))
+    capsys.readouterr()
+
+    main(["login", "--username", "alice", "--password", "correct horse battery"])
+
+    assert re.fullmatch(
+        r"Login failed: the session agent socket path is too long \(\d+ bytes, at most 107\); set a shorter PM_AGENT_SOCKET\n",
+        capsys.readouterr().out,
+    )
+    assert not long_socket_path.parent.exists()
