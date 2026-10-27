@@ -29,3 +29,15 @@ def test_vault_to_rows_orders_vn_history_by_version_number():
         "github__v1": {"password": "token-pw-1"},
     }}
     assert [row.version for row in vault_to_rows(vault).history] == [1, 2, 10]
+
+
+# History rows have no tags, so converting such a vault would silently drop them; refusing it stops the import with
+# vault.json untouched, and the message says which label to fix
+@pytest.mark.unit
+def test_vault_to_rows_refuses_a_vn_label_that_has_tags():
+    vault = {"alice": {
+        "github": {"password": "token-pw-2"},
+        "github__v1": {"password": "token-pw-1", "tags": ["work"]},
+    }}
+    with pytest.raises(ValueError, match=r"^'github__v1' is an old password version and has tags; remove them with `pm remove github__v1 --tag work` first$"):
+        vault_to_rows(vault)

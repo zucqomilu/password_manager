@@ -40,7 +40,17 @@ class VaultRows:
     history: tuple
 
 
+# History rows have no tags: refuse such a vault rather than drop them
+def check_untagged_versions(vault):
+    tagged = next(((label, entry["tags"]) for labels in vault.values() for label, entry in labels.items()
+                   if VERSIONED_LABEL.match(label) and entry.get("tags")), None)
+    if tagged:
+        raise ValueError(f"'{tagged[0]}' is an old password version and has tags; "
+                         f"remove them with `pm remove {tagged[0]} --tag {' '.join(tagged[1])}` first")
+
+
 def vault_to_rows(vault):
+    check_untagged_versions(vault)
     return VaultRows(
         entries=tuple(
             EntryRow(username, label, entry["password"], entry.get("login"))
