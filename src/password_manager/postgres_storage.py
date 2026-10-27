@@ -51,11 +51,15 @@ def vault_to_rows(vault):
             for username, labels in vault.items() for label, entry in labels.items() if not VERSIONED_LABEL.match(label)
             for position, tag in enumerate(entry.get("tags", []))
         ),
-        history=tuple(
-            HistoryRow(username, match[1], int(match[2]), entry["password"], entry.get("login"))
-            for username, labels in vault.items() for label, entry in labels.items()
-            for match in [VERSIONED_LABEL.match(label)] if match
-        ),
+        # Numeric order, so __v10 follows __v2 whatever order vault.json lists the labels in
+        history=tuple(sorted(
+            (
+                HistoryRow(username, match[1], int(match[2]), entry["password"], entry.get("login"))
+                for username, labels in vault.items() for label, entry in labels.items()
+                for match in [VERSIONED_LABEL.match(label)] if match
+            ),
+            key=lambda row: (row.username, row.label, row.version),
+        )),
     )
 
 
