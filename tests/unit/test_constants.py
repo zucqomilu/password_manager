@@ -95,3 +95,10 @@ def test_get_socket_path_honors_pm_agent_socket_override(monkeypatch):
 def test_get_database_url_defaults_to_postgresql_password_manager(monkeypatch):
     monkeypatch.delenv("PM_DATABASE_URL", raising=False)
     assert get_database_url() == "postgresql:///password_manager"
+
+
+# The URL is a secret once it holds a password, so it is read from the environment and never from a file in the repo
+@pytest.mark.unit
+def test_get_database_url_honors_pm_database_url_override(monkeypatch):
+    monkeypatch.setenv("PM_DATABASE_URL", "postgresql://pm@db.example/vault")
+    assert get_database_url() == "postgresql://pm@db.example/vault"
