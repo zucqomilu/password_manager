@@ -1,6 +1,6 @@
 import pytest
 
-from password_manager.postgres_storage import EntryRow, HistoryRow, TagRow, VaultRows, vault_to_rows
+from password_manager.postgres_storage import EntryRow, HistoryRow, TagRow, VaultRows, rows_to_vault, vault_to_rows
 
 
 # One JSON label becomes one entry row plus one row per tag, and each __vN label a history row of its base label.
@@ -41,3 +41,22 @@ def test_vault_to_rows_refuses_a_vn_label_that_has_tags():
     }}
     with pytest.raises(ValueError, match=r"^'github__v1' is an old password version and has tags; remove them with `pm remove github__v1 --tag work` first$"):
         vault_to_rows(vault)
+
+
+# The shape core.py works on: each history row becomes a <label>__vN label again, tags come back in position order,
+# and an entry without a login or tags gets no such key. mail__v1 has no entry, as after delete_label(), and is kept.
+@pytest.mark.unit
+def test_rows_to_vault_rebuilds_the_json_vault_shape_including_vn_labels():
+    rows = VaultRows(
+        entries=(EntryRow("alice", "github", "token-pw-2", "token-login"), EntryRow("bob", "bank", "token-pw-4", None)),
+        tags=(TagRow("alice", "github", 1, "dev"), TagRow("alice", "github", 0, "work")),
+        history=(HistoryRow("alice", "github", 1, "token-pw-1", "token-login"), HistoryRow("alice", "mail", 1, "token-pw-3", None)),
+    )
+    assert rows_to_vault(rows) == {
+        "alice": {
+            "github": {"password": "token-pw-2", "login": "token-login", "tags": ["work", "dev"]},
+            "github__v1": {"password": "token-pw-1", "login": "token-login"},
+            "mail__v1": {"password": "token-pw-3"},
+        },
+        "bob": {"bank": {"password": "token-pw-4"}},
+    }

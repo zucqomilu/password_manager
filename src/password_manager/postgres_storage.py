@@ -73,6 +73,29 @@ def vault_to_rows(vault):
     )
 
 
+def entry_fields(password, login):
+    return {"password": password, **({"login": login} if login is not None else {})}
+
+
+# Tags in position order; no "tags" key at all when there are none, as in vault.json
+def tags_field(rows, username, label):
+    tags = [row.tag for row in sorted(rows.tags, key=lambda row: row.position) if (row.username, row.label) == (username, label)]
+    return {"tags": tags} if tags else {}
+
+
+# The vault shape core.py works on, with each history row back under its <label>__vN label
+def rows_to_vault(rows):
+    return {
+        username: {
+            **{row.label: {**entry_fields(row.password, row.login), **tags_field(rows, username, row.label)}
+               for row in rows.entries if row.username == username},
+            **{f"{row.label}__v{row.version}": entry_fields(row.password, row.login)
+               for row in rows.history if row.username == username},
+        }
+        for username in dict.fromkeys(row.username for row in (*rows.entries, *rows.history))
+    }
+
+
 # Placeholders until the row tests fill them in: every call fails loudly,
 # so PM_STORAGE=postgres can never silently drop a write or show an empty vault.
 def load_vault():
