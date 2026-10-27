@@ -4,7 +4,7 @@ import secrets
 import pyperclip
 from cryptography.fernet import InvalidToken
 from .logger import logger
-from .storage import load_vault, backup_vault, save_vault
+from .storage import Storage, load_vault, backup_vault, save_vault
 
 
 def is_versioned_backup(label):
@@ -16,10 +16,16 @@ def generate_password(length=16):
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
-def save_password(username, label, fernet, password=None, login=None, tags=None):
+# The JSON storage, built from this module's own names at call time so patches of core.load_vault and the others apply
+def json_storage():
+    return Storage(load_vault=load_vault, save_vault=save_vault, backup_vault=backup_vault)
+
+
+def save_password(username, label, fernet, password=None, login=None, tags=None, storage=None):
     logger.info(f"Attempting to save password for '{label}'.")
 
-    vault = load_vault()
+    store = storage or json_storage()
+    vault = store.load_vault()
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
         logger.error("Vault loading failed: returned None.")
@@ -56,7 +62,7 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
             logger.info(f"Overwriting password for '{label}' (backup saved as '{versioned_label}').")
             print(f"Backed up previous password to '{versioned_label}'.")
 
-            backup_vault()
+            store.backup_vault()
 
         # Only an old password that will not decrypt is reported as a wrong master password;
         # SessionLocked and a failed backup propagate, and either way nothing is saved
@@ -79,7 +85,7 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
                 existing_entry["tags"].append(tag)
 
     vault_data[label] = existing_entry
-    save_vault(vault)
+    store.save_vault(vault)
     
     logger.info(f"Credentials saved for '{label}'.")
     print(f"Saved credentials for '{label}'.")

@@ -5,6 +5,7 @@ from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
 from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
 from password_manager.session import SessionLocked
+from password_manager.storage import Storage
 
 
 @pytest.mark.unit
@@ -121,6 +122,23 @@ def test_save_password_overwrite(fernet, valid_vault):
         mock_backup.assert_called_once()
         mock_save.assert_called_once()
 
+
+
+# The backend is passed in, so the same save_password() writes to the JSON files or to Postgres. An overwrite uses all
+# three functions; the module's own JSON functions are patched only to prove they are never reached.
+@pytest.mark.unit
+def test_save_password_writes_through_the_storage_functions_it_is_given(fernet, valid_vault):
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.save_vault") as json_save, \
+         patch("password_manager.core.backup_vault") as json_backup, \
+         patch("password_manager.core.input", return_value="y"):
+        assert save_password("alice", "github", fernet, "newpass", storage=storage) is True
+    storage.backup_vault.assert_called_once()
+    assert fernet.decrypt(storage.save_vault.call_args[0][0]["alice"]["github"]["password"].encode()) == b"newpass"
+    json_load.assert_not_called()
+    json_save.assert_not_called()
+    json_backup.assert_not_called()
 
 @pytest.mark.unit
 def test_save_password_user_declines_overwrite(fernet, valid_vault):
