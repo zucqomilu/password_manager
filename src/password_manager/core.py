@@ -221,8 +221,8 @@ def decrypts(fernet, token):
 
 
 # Check every entry, versioned backups included, without ever returning or logging a decrypted value
-def verify_vault(username, fernet):
-    vault = load_vault()
+def verify_vault(username, fernet, storage=None):
+    vault = (storage or json_storage()).load_vault()
     if vault is None:
         return None
     entries = vault.get(username, {})

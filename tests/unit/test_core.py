@@ -732,6 +732,17 @@ def test_verify_vault_returns_count_of_entries_that_decrypt(fernet, valid_vault)
         assert verify_vault("alice", fernet)["ok"] == 3
 
 
+
+# After a migration, pm verify must check the backend in use, not the JSON files left behind; the module's own
+# load_vault is patched only to prove it is never reached
+@pytest.mark.unit
+def test_verify_vault_reads_through_the_storage_functions_it_is_given(fernet, valid_vault):
+    valid_vault["alice"]["gitlab"] = {"password": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()}
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load:
+        assert verify_vault("alice", fernet, storage=storage) == {"ok": 3, "bad_password": ["gitlab"], "bad_login": []}
+    json_load.assert_not_called()
+
 @pytest.mark.unit
 def test_verify_vault_reports_labels_whose_password_fails_to_decrypt(fernet, valid_vault):
     valid_vault["alice"]["gitlab"] = {"password": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()}
