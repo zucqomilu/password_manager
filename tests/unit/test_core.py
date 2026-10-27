@@ -761,6 +761,25 @@ def test_delete_label_removes_label_from_users_vault(valid_vault):
         assert mock_save.call_args.args[0]["alice"].keys() == {"twitter", "twitter__v1"}
 
 
+
+# Load, backup and save all go through the given backend, the backup still before the save; the module's own functions
+# are patched only to prove they are never reached
+@pytest.mark.unit
+def test_delete_label_writes_through_the_storage_functions_it_is_given(valid_vault):
+    calls = Mock()
+    calls.load_vault.return_value = valid_vault
+    storage = Storage(load_vault=calls.load_vault, save_vault=calls.save_vault, backup_vault=calls.backup_vault)
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.save_vault") as json_save, \
+         patch("password_manager.core.backup_vault") as json_backup, \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "github", storage=storage)
+    assert calls.mock_calls == [call.load_vault(), call.backup_vault(), call.save_vault(ANY)]
+    assert calls.save_vault.call_args.args[0]["alice"].keys() == {"twitter", "twitter__v1"}
+    json_load.assert_not_called()
+    json_save.assert_not_called()
+    json_backup.assert_not_called()
+
 @pytest.mark.unit
 def test_delete_label_does_not_remove_the_labels_versions(valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
