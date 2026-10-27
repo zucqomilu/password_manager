@@ -1,6 +1,6 @@
 import pytest
 
-from password_manager.constants import get_data_dir, get_log, get_socket_path, get_users, get_vault
+from password_manager.constants import get_data_dir, get_database_url, get_log, get_socket_path, get_users, get_vault
 
 
 # Keep a PM_DATA_DIR exported in the developer's shell from leaking into these tests
@@ -87,3 +87,11 @@ def test_get_socket_path_honors_pm_agent_socket_override(monkeypatch):
     monkeypatch.setenv("PM_AGENT_SOCKET", "/custom/agent.sock")
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
     assert get_socket_path() == "/custom/agent.sock"
+
+
+# A local socket connection to a database of pm's own: no host, no password, so the default URL holds no secret and
+# peer authentication as the logged-in user is what admits it
+@pytest.mark.unit
+def test_get_database_url_defaults_to_postgresql_password_manager(monkeypatch):
+    monkeypatch.delenv("PM_DATABASE_URL", raising=False)
+    assert get_database_url() == "postgresql:///password_manager"
