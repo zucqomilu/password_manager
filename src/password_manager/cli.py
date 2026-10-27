@@ -6,7 +6,7 @@ from .memory import harden_process
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
-from .storage import load_vault
+from .storage import get_storage, load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
 # so this never decrypts and never touches the keyring session or users.json.
@@ -86,7 +86,7 @@ def build_parser():
 def run_command(parser, args, username, fernet):
     if args.command == 'generate':
         pwd = generate_password(args.length)
-        if save_password(username, args.label, fernet, password=pwd, login=args.login):
+        if save_password(username, args.label, fernet, password=pwd, login=args.login, storage=get_storage()):
             logger.info(f"Generated new password for '{args.label}' with length {args.length}.")
             print(f"Generated password: {pwd}")
     elif args.command == "set":
@@ -94,17 +94,17 @@ def run_command(parser, args, username, fernet):
             logger.error(f"You must run with eather args --password or --login or --tags.")
             print("Error: You must specify at least --password or --login or --tags.")
             return
-        save_password(username, args.label, fernet, password=args.password, login=args.login, tags=args.tags)
+        save_password(username, args.label, fernet, password=args.password, login=args.login, tags=args.tags, storage=get_storage())
     elif args.command == 'get':
-        get_password(username, args.label, fernet, show=args.show)
+        get_password(username, args.label, fernet, show=args.show, storage=get_storage())
     elif args.command == 'remove':
-        remove_tags(username, args.label, tags=args.tags)
+        remove_tags(username, args.label, tags=args.tags, storage=get_storage())
     elif args.command == 'delete':
-        delete_label(username, args.label)
+        delete_label(username, args.label, storage=get_storage())
     elif args.command == 'list':
-        list_labels(username, fernet, tags=args.tags)
+        list_labels(username, fernet, tags=args.tags, storage=get_storage())
     elif args.command == 'verify':
-        result = verify_vault(username, fernet)
+        result = verify_vault(username, fernet, storage=get_storage())
         if result is None:
             print("Failed to load password vault. The vault may be corrupted or unreadable.")
             return

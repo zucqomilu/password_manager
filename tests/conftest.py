@@ -11,9 +11,11 @@ from unittest.mock import mock_open, patch
 # Point PM_DATA_DIR at a throwaway folder before any test module imports the package
 # (logger.py opens vault.log at import), so no test run touches the real data dir.
 # PM_AGENT_SOCKET goes in the same folder, so no test run can reach the agent holding the real key.
+# A PM_STORAGE exported in the shell is dropped, so no test run is sent to a real database.
 def pytest_configure(config):
     os.environ["PM_DATA_DIR"] = tempfile.mkdtemp(prefix="pm-tests-")
     os.environ["PM_AGENT_SOCKET"] = os.path.join(os.environ["PM_DATA_DIR"], "agent.sock")
+    os.environ.pop("PM_STORAGE", None)
 
 
 def pytest_unconfigure(config):
