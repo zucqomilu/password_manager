@@ -581,6 +581,21 @@ def test_remove_tags_removes_existing_tag(valid_vault):
     mock_save_vault.assert_called_once_with(valid_vault)
 
 
+
+# Both the read and the write go through the given backend; the module's own functions are patched only to prove
+# they are never reached
+@pytest.mark.unit
+def test_remove_tags_writes_through_the_storage_functions_it_is_given(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.save_vault") as json_save:
+        remove_tags("alice", "github", tags=["development"], storage=storage)
+    assert storage.save_vault.call_args[0][0]["alice"]["github"]["tags"] == ["work"]
+    storage.backup_vault.assert_not_called()
+    json_load.assert_not_called()
+    json_save.assert_not_called()
+
 @pytest.mark.unit
 def test_remove_tags_handles_vault_load_failure(capsys):
     with patch("password_manager.core.load_vault", return_value=None), \

@@ -180,8 +180,9 @@ def list_labels(username, fernet, tags=None, storage=None):
             print(f"No passwords found with tags: {', '.join(tags)}.")
 
 
-def remove_tags(username, label, tags):
-    vault = load_vault()
+def remove_tags(username, label, tags, storage=None):
+    store = storage or json_storage()
+    vault = store.load_vault()
 
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
@@ -208,7 +209,7 @@ def remove_tags(username, label, tags):
     if not existing_tags:
         entry.pop("tags", None)
 
-    save_vault(vault)
+    store.save_vault(vault)
 
 
 def decrypts(fernet, token):
