@@ -1,6 +1,7 @@
 import pytest
 import json, base64, logging
 from unittest.mock import patch, mock_open
+from password_manager import postgres_storage
 from password_manager.storage import Storage, get_storage, load_vault, save_vault, load_users, save_users, backup_vault
 
 # === Helpers ===
@@ -246,3 +247,13 @@ def test_backup_vault_file_missing(caplog):
 def test_get_storage_returns_the_json_storage_by_default(monkeypatch):
     monkeypatch.delenv("PM_STORAGE", raising=False)
     assert get_storage() == Storage(load_vault=load_vault, save_vault=save_vault, backup_vault=backup_vault)
+
+
+@pytest.mark.unit
+def test_get_storage_returns_the_postgres_storage_when_pm_storage_is_postgres(monkeypatch):
+    monkeypatch.setenv("PM_STORAGE", "postgres")
+    assert get_storage() == Storage(
+        load_vault=postgres_storage.load_vault,
+        save_vault=postgres_storage.save_vault,
+        backup_vault=postgres_storage.backup_vault,
+    )

@@ -2,6 +2,7 @@ import shutil, json, os, tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from . import postgres_storage
 from .logger import logger
 from .validate_storage import validate_users, validate_vault
 import password_manager.constants
@@ -109,7 +110,7 @@ def backup_users():
     print(f"Created backup: {backup_filename}")
     return backup_filename
 
-# The storage functions core.py is given: the JSON files by default
+# The storage functions core.py is given: the JSON files by default, Postgres only when PM_STORAGE is exactly "postgres"
 @dataclass(frozen=True)
 class Storage:
     load_vault: Callable
@@ -117,4 +118,8 @@ class Storage:
     backup_vault: Callable
 
 def get_storage():
-    return Storage(load_vault=load_vault, save_vault=save_vault, backup_vault=backup_vault)
+    return (
+        Storage(load_vault=postgres_storage.load_vault, save_vault=postgres_storage.save_vault, backup_vault=postgres_storage.backup_vault)
+        if os.environ.get("PM_STORAGE") == "postgres"
+        else Storage(load_vault=load_vault, save_vault=save_vault, backup_vault=backup_vault)
+    )
