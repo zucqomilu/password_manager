@@ -1,4 +1,6 @@
 import shutil, json, os, tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from .logger import logger
 from .validate_storage import validate_users, validate_vault
@@ -106,3 +108,13 @@ def backup_users():
     logger.info(f"Created users backup '{backup_filename}'.")
     print(f"Created backup: {backup_filename}")
     return backup_filename
+
+# The storage functions core.py is given: the JSON files by default
+@dataclass(frozen=True)
+class Storage:
+    load_vault: Callable
+    save_vault: Callable
+    backup_vault: Callable
+
+def get_storage():
+    return Storage(load_vault=load_vault, save_vault=save_vault, backup_vault=backup_vault)
