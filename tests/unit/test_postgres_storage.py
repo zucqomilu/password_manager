@@ -60,3 +60,20 @@ def test_rows_to_vault_rebuilds_the_json_vault_shape_including_vn_labels():
         },
         "bob": {"bank": {"password": "token-pw-4"}},
     }
+
+
+# The guarantee the import rests on: a vault survives the trip to rows and back unchanged, so nothing is lost or altered.
+# Two users, tags in a non-alphabetical order, a label past __v9, and versions whose label was deleted.
+@pytest.mark.unit
+def test_rows_to_vault_inverts_vault_to_rows_for_a_vault_with_tags_and_versions():
+    vault = {
+        "alice": {
+            "github": {"password": "token-pw-12", "login": "token-login-1", "tags": ["work", "dev", "code"]},
+            **{f"github__v{version}": {"password": f"token-pw-{version}", "login": "token-login-1"} for version in range(1, 12)},
+            "mail": {"password": "token-pw-20", "tags": ["personal"]},
+            "old-bank__v1": {"password": "token-pw-30"},
+            "old-bank__v2": {"password": "token-pw-31", "login": "token-login-2"},
+        },
+        "bob": {"bank": {"password": "token-pw-40", "login": "token-login-3"}},
+    }
+    assert rows_to_vault(vault_to_rows(vault)) == vault
