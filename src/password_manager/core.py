@@ -105,10 +105,10 @@ def copy_to_clipboard(label, password):
         print(f"Could not copy the password for '{label}' to the clipboard.")
 
 
-def get_password(username, label, fernet, show=False):
+def get_password(username, label, fernet, show=False, storage=None):
     logger.info(f"Attempting to retrieve password for '{label}'.")
     
-    vault = load_vault()
+    vault = (storage or json_storage()).load_vault()
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
         logger.error("Vault loading failed: returned None.")

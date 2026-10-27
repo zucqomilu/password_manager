@@ -220,6 +220,18 @@ def test_get_password_with_login(capsys, fernet, valid_vault):
         assert "Login: alice@example.com" in out
 
 
+
+# Reads go through the given backend too; the module's own load_vault is patched only to prove it is never reached
+@pytest.mark.unit
+def test_get_password_reads_through_the_storage_functions_it_is_given(capsys, fernet, valid_vault):
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.pyperclip.copy") as mock_clipboard:
+        get_password("alice", "github", fernet, storage=storage)
+    mock_clipboard.assert_called_once_with("supersecurepass1")
+    assert "Login: alice@example.com" in capsys.readouterr().out
+    json_load.assert_not_called()
+
 @pytest.mark.unit
 def test_get_password_reports_a_clipboard_failure_and_still_shows_the_password_with_show(fernet, capsys, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
