@@ -290,6 +290,16 @@ def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
         assert "- github" not in captured.out
 
 
+
+# The list comes from the given backend; the module's own load_vault is patched only to prove it is never reached
+@pytest.mark.unit
+def test_list_labels_reads_through_the_storage_functions_it_is_given(fernet, capsys, valid_vault):
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load:
+        list_labels("alice", fernet, storage=storage)
+    assert capsys.readouterr().out == "Stored labels:\n- github (with login)\n- twitter\n"
+    json_load.assert_not_called()
+
 @pytest.mark.unit
 def test_list_labels_lets_session_locked_through_instead_of_hiding_entries(valid_vault):
     locked_cipher = Mock(decrypt=Mock(side_effect=SessionLocked))

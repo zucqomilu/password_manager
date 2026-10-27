@@ -137,10 +137,10 @@ def get_password(username, label, fernet, show=False, storage=None):
         print(f"No password found for '{label}'.")
 
 
-def list_labels(username, fernet, tags=None):
+def list_labels(username, fernet, tags=None, storage=None):
     logger.info("Listing all stored password labels.")
     
-    vault = load_vault()
+    vault = (storage or json_storage()).load_vault()
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
         logger.error("Vault loading failed: returned None.")
