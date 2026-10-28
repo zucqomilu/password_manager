@@ -121,6 +121,42 @@ def row_to_user_record(row):
             "wrapped_key": row.wrapped_key}
 
 
+# Each migration runs once, in order, and is recorded in schema_migrations. The tables hold what the JSON files hold:
+# Fernet tokens, plaintext tags and the wrapped data key with its KDF parameters. All SQL here is fixed text.
+MIGRATIONS = (
+    (1, (
+        """CREATE TABLE users (
+            username text PRIMARY KEY, salt text NOT NULL, time_cost integer NOT NULL,
+            memory_cost integer NOT NULL, parallelism integer NOT NULL, wrapped_key text NOT NULL)""",
+        """CREATE TABLE entries (
+            username text NOT NULL REFERENCES users, label text NOT NULL,
+            password text NOT NULL, login text, PRIMARY KEY (username, label))""",
+        # The (username, label, tag) key makes a duplicate tag impossible; tags go with their entry
+        """CREATE TABLE tags (
+            username text NOT NULL, label text NOT NULL, position integer NOT NULL, tag text NOT NULL,
+            PRIMARY KEY (username, label, tag), UNIQUE (username, label, position),
+            FOREIGN KEY (username, label) REFERENCES entries ON DELETE CASCADE)""",
+        # Tied to the user, not the entry, so deleting an entry keeps its old passwords, as delete_label() does
+        """CREATE TABLE password_history (
+            username text NOT NULL REFERENCES users, label text NOT NULL, version integer NOT NULL CHECK (version > 0),
+            password text NOT NULL, login text, PRIMARY KEY (username, label, version))""",
+    )),
+)
+
+
+# Takes an open connection, so this module never imports psycopg itself and a JSON-only install still starts.
+# One transaction: a migration that fails leaves the schema as it was.
+def apply_migrations(connection):
+    with connection.transaction():
+        connection.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY)")
+        applied = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+        for version, statements in MIGRATIONS:
+            if version not in applied:
+                for statement in statements:
+                    connection.execute(statement)
+                connection.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (version,))
+
+
 # Placeholders until the row tests fill them in: every call fails loudly,
 # so PM_STORAGE=postgres can never silently drop a write or show an empty vault.
 def load_vault():

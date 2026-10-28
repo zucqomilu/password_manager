@@ -1,4 +1,5 @@
-import pytest, base64, json, builtins, tempfile, os, shutil, time
+import pytest, base64, json, builtins, tempfile, os, shutil, subprocess, time, uuid
+import psycopg
 import keyring
 from keyring.backends.null import Keyring as NullKeyring
 from keyring.errors import PasswordDeleteError
@@ -11,16 +12,44 @@ from unittest.mock import mock_open, patch
 # Point PM_DATA_DIR at a throwaway folder before any test module imports the package
 # (logger.py opens vault.log at import), so no test run touches the real data dir.
 # PM_AGENT_SOCKET goes in the same folder, so no test run can reach the agent holding the real key.
-# A PM_STORAGE exported in the shell is dropped, so no test run is sent to a real database.
+# A PM_STORAGE exported in the shell is dropped, so no test run is sent to a real database, and PM_DATABASE_URL points
+# at a socket dir with no server in it, so a connection a test did not set up fails instead of reaching one.
 def pytest_configure(config):
     os.environ["PM_DATA_DIR"] = tempfile.mkdtemp(prefix="pm-tests-")
     os.environ["PM_AGENT_SOCKET"] = os.path.join(os.environ["PM_DATA_DIR"], "agent.sock")
     os.environ.pop("PM_STORAGE", None)
+    os.environ["PM_DATABASE_URL"] = f"postgresql:///password_manager?host={os.environ['PM_DATA_DIR']}"
 
 
 def pytest_unconfigure(config):
+    os.environ.pop("PM_DATABASE_URL")
     os.environ.pop("PM_AGENT_SOCKET")
     shutil.rmtree(os.environ.pop("PM_DATA_DIR"), ignore_errors=True)
+
+
+# A throwaway Postgres cluster for the whole run, in a temp dir of its own: its socket lives there, it has no TCP
+# listener, and only peer authentication as the user running the tests is accepted. Nothing outlives the run.
+@pytest.fixture(scope="session")
+def postgres_cluster():
+    root = tempfile.mkdtemp(prefix="pm-pg-")
+    subprocess.run(["initdb", "-D", f"{root}/data", "--auth-local=peer", "--auth-host=reject", "--no-sync"],
+                   check=True, capture_output=True)
+    subprocess.run(["pg_ctl", "-D", f"{root}/data", "-l", f"{root}/server.log", "-w",
+                    "-o", f"-k {root} -c listen_addresses=''", "start"], check=True, capture_output=True)
+    yield root
+    subprocess.run(["pg_ctl", "-D", f"{root}/data", "-m", "immediate", "-w", "stop"], capture_output=True)
+    shutil.rmtree(root, ignore_errors=True)
+
+
+# A fresh, empty database in that cluster for each test, dropped afterwards; the value is its URL
+@pytest.fixture
+def postgres_database(postgres_cluster):
+    name = f"pm_test_{uuid.uuid4().hex}"
+    with psycopg.connect(f"postgresql:///postgres?host={postgres_cluster}", autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{name}"')
+    yield f"postgresql:///{name}?host={postgres_cluster}"
+    with psycopg.connect(f"postgresql:///postgres?host={postgres_cluster}", autocommit=True) as admin:
+        admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
 
 
 test_keyring = {}
