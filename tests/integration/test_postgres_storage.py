@@ -1,7 +1,7 @@
 import psycopg
 import pytest
 
-from password_manager.postgres_storage import apply_migrations
+from password_manager.postgres_storage import apply_migrations, fetch_user, insert_user, user_record_to_row
 
 
 # The four tables the rows map to, plus the table that records which migrations have run
@@ -27,3 +27,15 @@ def test_apply_migrations_is_a_no_op_when_the_schema_is_current(postgres_databas
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
     assert users == [("alice",)]
     assert versions == [1]
+
+
+# A real v2 record (the fixture's tiny Argon2id costs) goes in as a row and comes back field for field, so login can
+# unwrap the data key from what Postgres returns. A username with no row gives None, as load_users() gives no record.
+@pytest.mark.integration
+def test_insert_user_and_fetch_user_round_trip_a_user(postgres_database, make_v2_user):
+    row = user_record_to_row("alice", make_v2_user()["alice"])
+    with psycopg.connect(postgres_database) as connection:
+        apply_migrations(connection)
+        insert_user(connection, row)
+        assert fetch_user(connection, "alice") == row
+        assert fetch_user(connection, "bob") is None

@@ -157,6 +157,21 @@ def apply_migrations(connection):
                 connection.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (version,))
 
 
+# Values always go in as bound parameters, never into the SQL text. Nothing here commits: the caller's transaction
+# decides, so an import writes everything or nothing. An existing username fails on the key instead of being replaced.
+def insert_user(connection, row):
+    connection.execute(
+        "INSERT INTO users (username, salt, time_cost, memory_cost, parallelism, wrapped_key) VALUES (%s, %s, %s, %s, %s, %s)",
+        (row.username, row.salt, row.time_cost, row.memory_cost, row.parallelism, row.wrapped_key))
+
+
+def fetch_user(connection, username):
+    found = connection.execute(
+        "SELECT username, salt, time_cost, memory_cost, parallelism, wrapped_key FROM users WHERE username = %s",
+        (username,)).fetchone()
+    return UserRow(*found) if found else None
+
+
 # Placeholders until the row tests fill them in: every call fails loudly,
 # so PM_STORAGE=postgres can never silently drop a write or show an empty vault.
 def load_vault():
