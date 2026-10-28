@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # The __vN labels save_password() keeps of overwritten passwords; the same pattern as core.is_versioned_backup()
 VERSIONED_LABEL = re.compile(r"^(.*)__v(\d+)$")
@@ -94,6 +94,28 @@ def rows_to_vault(rows):
         }
         for username in dict.fromkeys(row.username for row in (*rows.entries, *rows.history))
     }
+
+
+# A v2 users.json record, one column per field; the wrapped key stays wrapped and out of any printed row
+@dataclass(frozen=True)
+class UserRow:
+    username: str
+    salt: str
+    time_cost: int
+    memory_cost: int
+    parallelism: int
+    wrapped_key: str = field(repr=False)
+
+
+def user_record_to_row(username, record):
+    return UserRow(username, record["kdf"]["salt"], record["kdf"]["time_cost"], record["kdf"]["memory_cost"],
+                   record["kdf"]["parallelism"], record["wrapped_key"])
+
+
+def row_to_user_record(row):
+    return {"version": 2,
+            "kdf": {"salt": row.salt, "time_cost": row.time_cost, "memory_cost": row.memory_cost, "parallelism": row.parallelism},
+            "wrapped_key": row.wrapped_key}
 
 
 # Placeholders until the row tests fill them in: every call fails loudly,

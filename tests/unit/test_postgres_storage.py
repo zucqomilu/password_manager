@@ -1,6 +1,8 @@
 import pytest
 
-from password_manager.postgres_storage import EntryRow, HistoryRow, TagRow, VaultRows, rows_to_vault, vault_to_rows
+from password_manager.postgres_storage import (
+    EntryRow, HistoryRow, TagRow, UserRow, VaultRows, row_to_user_record, rows_to_vault, user_record_to_row, vault_to_rows,
+)
 
 
 # One JSON label becomes one entry row plus one row per tag, and each __vN label a history row of its base label.
@@ -77,3 +79,16 @@ def test_rows_to_vault_inverts_vault_to_rows_for_a_vault_with_tags_and_versions(
         "bob": {"bank": {"password": "token-pw-40", "login": "token-login-3"}},
     }
     assert rows_to_vault(vault_to_rows(vault)) == vault
+
+
+# A users row holds what users.json holds for a v2 user: the Argon2id parameters and the wrapped data key, one column
+# each. There is no password hash and no unwrapped key, so the row is exactly as safe at rest as the JSON record.
+@pytest.mark.unit
+def test_user_record_to_row_and_row_to_user_record_round_trip_a_v2_record(make_v2_user):
+    record = make_v2_user()["alice"]
+    row = user_record_to_row("alice", record)
+    assert row == UserRow(
+        "alice", record["kdf"]["salt"], record["kdf"]["time_cost"], record["kdf"]["memory_cost"],
+        record["kdf"]["parallelism"], record["wrapped_key"],
+    )
+    assert row_to_user_record(row) == record
