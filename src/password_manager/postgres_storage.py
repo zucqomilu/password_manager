@@ -107,7 +107,10 @@ class UserRow:
     wrapped_key: str = field(repr=False)
 
 
+# Only v2 records: the database never holds a v1 PBKDF2 password verifier. A login upgrades a v1 record in users.json.
 def user_record_to_row(username, record):
+    if record.get("version") != 2:
+        raise ValueError(f"'{username}' still has a v1 user record; run `pm login` once to upgrade it, then import again")
     return UserRow(username, record["kdf"]["salt"], record["kdf"]["time_cost"], record["kdf"]["memory_cost"],
                    record["kdf"]["parallelism"], record["wrapped_key"])
 

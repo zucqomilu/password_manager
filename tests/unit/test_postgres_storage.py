@@ -92,3 +92,11 @@ def test_user_record_to_row_and_row_to_user_record_round_trip_a_v2_record(make_v
         record["kdf"]["parallelism"], record["wrapped_key"],
     )
     assert row_to_user_record(row) == record
+
+
+# The database only ever holds the Argon2id format: a v1 record (a PBKDF2 password verifier) is refused, and the
+# message names the fix, since a single login upgrades it in users.json
+@pytest.mark.unit
+def test_user_record_to_row_refuses_v1_records(make_user):
+    with pytest.raises(ValueError, match=r"^'alice' still has a v1 user record; run `pm login` once to upgrade it, then import again$"):
+        user_record_to_row("alice", make_user()["alice"])
