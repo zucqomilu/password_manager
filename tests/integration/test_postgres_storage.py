@@ -1,7 +1,18 @@
 import psycopg
 import pytest
 
-from password_manager.postgres_storage import apply_migrations, fetch_user, insert_user, user_record_to_row
+from password_manager.postgres_storage import (
+    EntryRow, UserRow, apply_migrations, fetch_entry, fetch_user, insert_user, upsert_entry, user_record_to_row,
+)
+
+
+# A migrated connection with one user, alice, for the entry tests; the user fields are placeholders, never a real key
+@pytest.fixture
+def connection(postgres_database):
+    with psycopg.connect(postgres_database) as connection:
+        apply_migrations(connection)
+        insert_user(connection, UserRow("alice", "salt", 2, 64, 2, "wrapped"))
+        yield connection
 
 
 # The four tables the rows map to, plus the table that records which migrations have run
@@ -39,3 +50,11 @@ def test_insert_user_and_fetch_user_round_trip_a_user(postgres_database, make_v2
         insert_user(connection, row)
         assert fetch_user(connection, "alice") == row
         assert fetch_user(connection, "bob") is None
+
+
+# A new label becomes an entry row holding the Fernet tokens as given; a label never stored gives None
+@pytest.mark.integration
+def test_upsert_entry_creates_an_entry_that_fetch_entry_returns(connection):
+    upsert_entry(connection, EntryRow("alice", "github", "token-pw-1", "token-login"))
+    assert fetch_entry(connection, "alice", "github") == EntryRow("alice", "github", "token-pw-1", "token-login")
+    assert fetch_entry(connection, "alice", "gitlab") is None

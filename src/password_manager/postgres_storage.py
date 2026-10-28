@@ -172,6 +172,17 @@ def fetch_user(connection, username):
     return UserRow(*found) if found else None
 
 
+def upsert_entry(connection, row):
+    connection.execute("INSERT INTO entries (username, label, password, login) VALUES (%s, %s, %s, %s)",
+                       (row.username, row.label, row.password, row.login))
+
+
+def fetch_entry(connection, username, label):
+    found = connection.execute("SELECT username, label, password, login FROM entries WHERE username = %s AND label = %s",
+                               (username, label)).fetchone()
+    return EntryRow(*found) if found else None
+
+
 # Placeholders until the row tests fill them in: every call fails loudly,
 # so PM_STORAGE=postgres can never silently drop a write or show an empty vault.
 def load_vault():
