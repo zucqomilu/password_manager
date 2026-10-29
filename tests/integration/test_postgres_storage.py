@@ -109,3 +109,16 @@ def test_save_vault_removes_labels_that_are_no_longer_in_the_vault(postgres_data
     }})
     save_vault({"alice": {"github__v1": {"password": token("pw-1")}, "mail": {"password": token("pw-3")}}})
     assert load_vault() == {"alice": {"github__v1": {"password": token("pw-1")}, "mail": {"password": token("pw-3")}}}
+
+
+# A vault can pass validate_vault() and still break a table rule: a label listing the same tag twice hits the tags key
+# only after the old rows are deleted and the new entries inserted. The error reaches the caller, and every old row
+# is still there, as a failed write of vault.json leaves the old file.
+@pytest.mark.integration
+def test_save_vault_rolls_back_entirely_when_a_row_fails(postgres_database, monkeypatch):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    stored = {"alice": {"github": {"password": token("pw-2"), "tags": ["work"]}, "github__v1": {"password": token("pw-1")}}}
+    save_vault(stored)
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        save_vault({"alice": {"mail": {"password": token("pw-3"), "tags": ["home", "home"]}}})
+    assert load_vault() == stored
