@@ -62,7 +62,8 @@ def vault_to_rows(vault):
         tags=tuple(
             TagRow(username, label, position, tag)
             for username, labels in vault.items() for label, entry in labels.items() if not VERSIONED_LABEL.match(label)
-            for position, tag in enumerate(entry.get("tags", []))
+            # A tag once per label, at its first occurrence: the tags key allows nothing else
+            for position, tag in enumerate(dict.fromkeys(entry.get("tags", [])))
         ),
         # Numeric order, so __v10 follows __v2 whatever order vault.json lists the labels in
         history=tuple(sorted(

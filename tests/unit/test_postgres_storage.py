@@ -66,6 +66,16 @@ def test_rows_to_vault_rebuilds_the_json_vault_shape_including_vn_labels():
     }
 
 
+# The tags table allows a tag once per label. pm never writes a duplicate, but a hand-edited vault.json can hold one;
+# keeping the first occurrence stores that vault instead of failing it, and the remaining order is unchanged.
+@pytest.mark.unit
+def test_vault_to_rows_keeps_only_the_first_of_a_labels_duplicate_tags():
+    vault = {"alice": {"github": {"password": "token-pw-1", "tags": ["work", "dev", "work", "code", "dev"]}}}
+    assert vault_to_rows(vault).tags == (
+        TagRow("alice", "github", 0, "work"), TagRow("alice", "github", 1, "dev"), TagRow("alice", "github", 2, "code"),
+    )
+
+
 # The guarantee the import rests on: a vault survives the trip to rows and back unchanged, so nothing is lost or altered.
 # Two users, tags in a non-alphabetical order, a label past __v9, and versions whose label was deleted.
 @pytest.mark.unit
