@@ -122,3 +122,11 @@ def test_save_vault_rolls_back_entirely_when_a_row_fails(postgres_database, monk
     with pytest.raises(psycopg.errors.UniqueViolation):
         save_vault({"alice": {"mail": {"password": token("pw-3"), "tags": ["home", "home"]}}})
     assert load_vault() == stored
+
+
+# A database pm has never written to, not even migrated, reads as an empty vault, as a missing vault.json does,
+# so the first pm set on Postgres starts from nothing instead of failing
+@pytest.mark.integration
+def test_load_vault_returns_an_empty_dict_for_an_empty_database(postgres_database, monkeypatch):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    assert load_vault() == {}
