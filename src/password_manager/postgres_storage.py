@@ -1,6 +1,10 @@
+import os
 import re
 from dataclasses import dataclass, field
-from .constants import get_database_url
+from datetime import datetime
+# A module import: storage imports this module, so its names are only read when called
+from . import storage
+from .constants import get_database_url, get_vault
 from .logger import logger
 from .validate_storage import validate_vault
 
@@ -230,6 +234,11 @@ def load_vault():
         ))
 
 
-# A placeholder until its own test fills it in: it fails loudly rather than skip the backup a delete relies on
+# A JSON copy of the stored vault, where the JSON backend keeps its backups: pm delete and an overwrite call this first,
+# so the current password of a deleted label survives as it does under JSON. Written 0600 like vault.json.
 def backup_vault():
-    raise NotImplementedError("Postgres storage is not available yet")
+    path = os.path.join(os.path.dirname(get_vault()), f"vault_backup_{datetime.now():%Y%m%d_%H%M%S_%f}.json")
+    storage.write_json_atomically(path, load_vault())
+    logger.info(f"Created vault backup '{path}'.")
+    print(f"Created backup: {path}")
+    return path

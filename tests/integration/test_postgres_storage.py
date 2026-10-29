@@ -1,11 +1,13 @@
 import base64
+import json
+import os
 
 import psycopg
 import pytest
 
 from password_manager.postgres_storage import (
-    EntryRow, UserRow, apply_migrations, connect, fetch_entry, fetch_user, insert_user, load_vault, save_vault, upsert_entry,
-    user_record_to_row,
+    EntryRow, UserRow, apply_migrations, backup_vault, connect, fetch_entry, fetch_user, insert_user, load_vault, save_vault,
+    upsert_entry, user_record_to_row,
 )
 
 
@@ -130,3 +132,18 @@ def test_save_vault_rolls_back_entirely_when_a_row_fails(postgres_database, monk
 def test_load_vault_returns_an_empty_dict_for_an_empty_database(postgres_database, monkeypatch):
     monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
     assert load_vault() == {}
+
+
+# What pm delete and an overwrite rely on: before the rows change, the stored vault is written to a vault_backup_*.json
+# next to where vault.json lives, readable by the JSON backend and as private as vault.json (0600)
+@pytest.mark.integration
+def test_backup_vault_writes_a_vault_backup_json_of_the_stored_vault(postgres_database, monkeypatch, tmp_path):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    monkeypatch.setenv("VAULT_FILE", str(tmp_path / "vault.json"))
+    stored = {"alice": {"github": {"password": token("pw-2"), "tags": ["work"]}, "github__v1": {"password": token("pw-1")}}}
+    save_vault(stored)
+    backup_vault()
+    backups = list(tmp_path.glob("vault_backup_*.json"))
+    assert len(backups) == 1
+    assert json.loads(backups[0].read_text()) == stored
+    assert os.stat(backups[0]).st_mode & 0o777 == 0o600
