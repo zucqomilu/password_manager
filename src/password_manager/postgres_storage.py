@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass, field
+from .constants import get_database_url
 
 # The __vN labels save_password() keeps of overwritten passwords; the same pattern as core.is_versioned_backup()
 VERSIONED_LABEL = re.compile(r"^(.*)__v(\d+)$")
@@ -181,6 +182,15 @@ def fetch_entry(connection, username, label):
     found = connection.execute("SELECT username, label, password, login FROM entries WHERE username = %s AND label = %s",
                                (username, label)).fetchone()
     return EntryRow(*found) if found else None
+
+
+# The only place psycopg is imported, so a JSON-only install (no postgres extra) never needs it.
+# The URL may hold a password: it goes to psycopg and nowhere else, never into a message or the log.
+def connect():
+    import psycopg
+    connection = psycopg.connect(get_database_url())
+    apply_migrations(connection)
+    return connection
 
 
 # Placeholders until the row tests fill them in: every call fails loudly,

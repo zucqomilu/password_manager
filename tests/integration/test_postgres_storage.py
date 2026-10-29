@@ -2,7 +2,7 @@ import psycopg
 import pytest
 
 from password_manager.postgres_storage import (
-    EntryRow, UserRow, apply_migrations, fetch_entry, fetch_user, insert_user, upsert_entry, user_record_to_row,
+    EntryRow, UserRow, apply_migrations, connect, fetch_entry, fetch_user, insert_user, upsert_entry, user_record_to_row,
 )
 
 
@@ -58,3 +58,14 @@ def test_upsert_entry_creates_an_entry_that_fetch_entry_returns(connection):
     upsert_entry(connection, EntryRow("alice", "github", "token-pw-1", "token-login"))
     assert fetch_entry(connection, "alice", "github") == EntryRow("alice", "github", "token-pw-1", "token-login")
     assert fetch_entry(connection, "alice", "gitlab") is None
+
+
+# pm's one way in: the database PM_DATABASE_URL names, already migrated, so every command sees the current schema
+@pytest.mark.integration
+def test_connect_opens_get_database_url_and_applies_the_migrations(postgres_database, monkeypatch):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    with connect() as connection:
+        database = connection.execute("SELECT current_database()").fetchone()[0]
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+    assert postgres_database.startswith(f"postgresql:///{database}?")
+    assert versions == [1]
