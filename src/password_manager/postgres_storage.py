@@ -129,17 +129,19 @@ MIGRATIONS = (
         """CREATE TABLE users (
             username text PRIMARY KEY, salt text NOT NULL, time_cost integer NOT NULL,
             memory_cost integer NOT NULL, parallelism integer NOT NULL, wrapped_key text NOT NULL)""",
+        # Entries and history do not reference users: users stay in users.json, and the users table is only filled by
+        # the import, so a user who registers later still has a vault
         """CREATE TABLE entries (
-            username text NOT NULL REFERENCES users, label text NOT NULL,
+            username text NOT NULL, label text NOT NULL,
             password text NOT NULL, login text, PRIMARY KEY (username, label))""",
         # The (username, label, tag) key makes a duplicate tag impossible; tags go with their entry
         """CREATE TABLE tags (
             username text NOT NULL, label text NOT NULL, position integer NOT NULL, tag text NOT NULL,
             PRIMARY KEY (username, label, tag), UNIQUE (username, label, position),
             FOREIGN KEY (username, label) REFERENCES entries ON DELETE CASCADE)""",
-        # Tied to the user, not the entry, so deleting an entry keeps its old passwords, as delete_label() does
+        # Not tied to the entry, so deleting an entry keeps its old passwords, as delete_label() does
         """CREATE TABLE password_history (
-            username text NOT NULL REFERENCES users, label text NOT NULL, version integer NOT NULL CHECK (version > 0),
+            username text NOT NULL, label text NOT NULL, version integer NOT NULL CHECK (version > 0),
             password text NOT NULL, login text, PRIMARY KEY (username, label, version))""",
     )),
 )
@@ -193,13 +195,34 @@ def connect():
     return connection
 
 
-# Placeholders until the row tests fill them in: every call fails loudly,
-# so PM_STORAGE=postgres can never silently drop a write or show an empty vault.
-def load_vault():
-    raise NotImplementedError("Postgres storage is not available yet")
-
+# Rewrites the whole vault, as vault.json is rewritten whole: one transaction, so a failure leaves the old rows
 def save_vault(data):
-    raise NotImplementedError("Postgres storage is not available yet")
+    rows = vault_to_rows(data)
+    with connect() as connection, connection.transaction():
+        connection.execute("DELETE FROM tags")
+        connection.execute("DELETE FROM password_history")
+        connection.execute("DELETE FROM entries")
+        for row in rows.entries:
+            upsert_entry(connection, row)
+        connection.cursor().executemany("INSERT INTO tags (username, label, position, tag) VALUES (%s, %s, %s, %s)",
+                                        [(row.username, row.label, row.position, row.tag) for row in rows.tags])
+        connection.cursor().executemany(
+            "INSERT INTO password_history (username, label, version, password, login) VALUES (%s, %s, %s, %s, %s)",
+            [(row.username, row.label, row.version, row.password, row.login) for row in rows.history])
 
+
+def load_vault():
+    with connect() as connection:
+        return rows_to_vault(VaultRows(
+            entries=tuple(EntryRow(*row) for row in connection.execute(
+                "SELECT username, label, password, login FROM entries ORDER BY username, label")),
+            tags=tuple(TagRow(*row) for row in connection.execute(
+                "SELECT username, label, position, tag FROM tags ORDER BY username, label, position")),
+            history=tuple(HistoryRow(*row) for row in connection.execute(
+                "SELECT username, label, version, password, login FROM password_history ORDER BY username, label, version")),
+        ))
+
+
+# A placeholder until its own test fills it in: it fails loudly rather than skip the backup a delete relies on
 def backup_vault():
     raise NotImplementedError("Postgres storage is not available yet")

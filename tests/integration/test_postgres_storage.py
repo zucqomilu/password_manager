@@ -2,7 +2,8 @@ import psycopg
 import pytest
 
 from password_manager.postgres_storage import (
-    EntryRow, UserRow, apply_migrations, connect, fetch_entry, fetch_user, insert_user, upsert_entry, user_record_to_row,
+    EntryRow, UserRow, apply_migrations, connect, fetch_entry, fetch_user, insert_user, load_vault, save_vault, upsert_entry,
+    user_record_to_row,
 )
 
 
@@ -69,3 +70,21 @@ def test_connect_opens_get_database_url_and_applies_the_migrations(postgres_data
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
     assert postgres_database.startswith(f"postgresql:///{database}?")
     assert versions == [1]
+
+
+# The Storage pair core.py calls. Users stay in users.json, so the vault's users have no rows in the users table.
+# Two users, ordered tags, a label past __v9 and versions whose label was deleted all come back exactly.
+@pytest.mark.integration
+def test_save_vault_stores_a_vault_that_load_vault_returns_unchanged(postgres_database, monkeypatch):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    vault = {
+        "alice": {
+            "github": {"password": "token-pw-12", "login": "token-login-1", "tags": ["work", "dev", "code"]},
+            **{f"github__v{version}": {"password": f"token-pw-{version}", "login": "token-login-1"} for version in range(1, 12)},
+            "mail": {"password": "token-pw-20", "tags": ["personal"]},
+            "old-bank__v1": {"password": "token-pw-30"},
+        },
+        "bob": {"bank": {"password": "token-pw-40", "login": "token-login-3"}},
+    }
+    save_vault(vault)
+    assert load_vault() == vault
