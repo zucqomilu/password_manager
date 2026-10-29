@@ -1,5 +1,7 @@
 import pytest
+from unittest.mock import patch
 
+from password_manager import postgres_storage
 from password_manager.postgres_storage import (
     EntryRow, HistoryRow, TagRow, UserRow, VaultRows, row_to_user_record, rows_to_vault, user_record_to_row, vault_to_rows,
 )
@@ -100,3 +102,13 @@ def test_user_record_to_row_and_row_to_user_record_round_trip_a_v2_record(make_v
 def test_user_record_to_row_refuses_v1_records(make_user):
     with pytest.raises(ValueError, match=r"^'alice' still has a v1 user record; run `pm login` once to upgrade it, then import again$"):
         user_record_to_row("alice", make_user()["alice"])
+
+
+# The same gate as the JSON save_vault(): a vault that fails validation is logged and never reaches the database, so
+# no connection is even opened and the stored rows stay as they were
+@pytest.mark.unit
+def test_postgres_save_vault_refuses_a_vault_that_fails_validate_vault(caplog):
+    with patch("password_manager.postgres_storage.connect") as mock_connect:
+        postgres_storage.save_vault({"alice": {"github": {"login": "token-login"}}})
+    mock_connect.assert_not_called()
+    assert "Aborting save: vault validation failed." in caplog.text

@@ -1,6 +1,8 @@
 import re
 from dataclasses import dataclass, field
 from .constants import get_database_url
+from .logger import logger
+from .validate_storage import validate_vault
 
 # The __vN labels save_password() keeps of overwritten passwords; the same pattern as core.is_versioned_backup()
 VERSIONED_LABEL = re.compile(r"^(.*)__v(\d+)$")
@@ -195,8 +197,12 @@ def connect():
     return connection
 
 
-# Rewrites the whole vault, as vault.json is rewritten whole: one transaction, so a failure leaves the old rows
+# Rewrites the whole vault, as vault.json is rewritten whole: one transaction, so a failure leaves the old rows.
+# The same validation gate as the JSON save_vault() comes first, so an invalid vault never reaches the database.
 def save_vault(data):
+    if not validate_vault(data):
+        logger.error("Aborting save: vault validation failed.")
+        return
     rows = vault_to_rows(data)
     with connect() as connection, connection.transaction():
         connection.execute("DELETE FROM tags")

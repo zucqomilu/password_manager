@@ -1,3 +1,5 @@
+import base64
+
 import psycopg
 import pytest
 
@@ -5,6 +7,11 @@ from password_manager.postgres_storage import (
     EntryRow, UserRow, apply_migrations, connect, fetch_entry, fetch_user, insert_user, load_vault, save_vault, upsert_entry,
     user_record_to_row,
 )
+
+
+# A placeholder in the shape validate_vault() accepts for a Fernet token (url-safe base64); it encrypts nothing
+def token(name):
+    return base64.urlsafe_b64encode(name.encode()).decode()
 
 
 # A migrated connection with one user, alice, for the entry tests; the user fields are placeholders, never a real key
@@ -79,12 +86,12 @@ def test_save_vault_stores_a_vault_that_load_vault_returns_unchanged(postgres_da
     monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
     vault = {
         "alice": {
-            "github": {"password": "token-pw-12", "login": "token-login-1", "tags": ["work", "dev", "code"]},
-            **{f"github__v{version}": {"password": f"token-pw-{version}", "login": "token-login-1"} for version in range(1, 12)},
-            "mail": {"password": "token-pw-20", "tags": ["personal"]},
-            "old-bank__v1": {"password": "token-pw-30"},
+            "github": {"password": token("pw-12"), "login": token("login-1"), "tags": ["work", "dev", "code"]},
+            **{f"github__v{version}": {"password": token(f"pw-{version}"), "login": token("login-1")} for version in range(1, 12)},
+            "mail": {"password": token("pw-20"), "tags": ["personal"]},
+            "old-bank__v1": {"password": token("pw-30")},
         },
-        "bob": {"bank": {"password": "token-pw-40", "login": "token-login-3"}},
+        "bob": {"bank": {"password": token("pw-40"), "login": token("login-3")}},
     }
     save_vault(vault)
     assert load_vault() == vault
@@ -96,9 +103,9 @@ def test_save_vault_stores_a_vault_that_load_vault_returns_unchanged(postgres_da
 def test_save_vault_removes_labels_that_are_no_longer_in_the_vault(postgres_database, monkeypatch):
     monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
     save_vault({"alice": {
-        "github": {"password": "token-pw-2", "tags": ["work"]},
-        "github__v1": {"password": "token-pw-1"},
-        "mail": {"password": "token-pw-3"},
+        "github": {"password": token("pw-2"), "tags": ["work"]},
+        "github__v1": {"password": token("pw-1")},
+        "mail": {"password": token("pw-3")},
     }})
-    save_vault({"alice": {"github__v1": {"password": "token-pw-1"}, "mail": {"password": "token-pw-3"}}})
-    assert load_vault() == {"alice": {"github__v1": {"password": "token-pw-1"}, "mail": {"password": "token-pw-3"}}}
+    save_vault({"alice": {"github__v1": {"password": token("pw-1")}, "mail": {"password": token("pw-3")}}})
+    assert load_vault() == {"alice": {"github__v1": {"password": token("pw-1")}, "mail": {"password": token("pw-3")}}}
