@@ -88,3 +88,17 @@ def test_save_vault_stores_a_vault_that_load_vault_returns_unchanged(postgres_da
     }
     save_vault(vault)
     assert load_vault() == vault
+
+
+# pm delete hands save_vault() a vault without the label: it must be gone from Postgres too, with its tags, while the
+# label's kept versions stay as long as the vault still has them
+@pytest.mark.integration
+def test_save_vault_removes_labels_that_are_no_longer_in_the_vault(postgres_database, monkeypatch):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    save_vault({"alice": {
+        "github": {"password": "token-pw-2", "tags": ["work"]},
+        "github__v1": {"password": "token-pw-1"},
+        "mail": {"password": "token-pw-3"},
+    }})
+    save_vault({"alice": {"github__v1": {"password": "token-pw-1"}, "mail": {"password": "token-pw-3"}}})
+    assert load_vault() == {"alice": {"github__v1": {"password": "token-pw-1"}, "mail": {"password": "token-pw-3"}}}
