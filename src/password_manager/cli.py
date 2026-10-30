@@ -36,8 +36,13 @@ def import_to_postgres(username, fernet):
     labels = [label for entries in vault.values() for label in entries]
     versions = sum(map(is_versioned_backup, labels))
     print(f"Imported into Postgres: {len(users)} users, {len(labels) - versions} entries, {versions} kept versions")
-    print(f"Verified {username}'s entries: {len(vault.get(username, {})) - len(verify_import(vault, username, fernet))} "
+    problems = verify_import(vault, username, fernet)
+    print(f"Verified {username}'s entries: {len(vault.get(username, {})) - len(problems)} "
           f"of {len(vault.get(username, {}))} decrypt identically from Postgres")
+    for label in problems:
+        print(f"Differs in Postgres: {label}")
+    if problems:
+        print("Keep using the JSON files (leave PM_STORAGE unset); users.json and vault.json are unchanged")
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
