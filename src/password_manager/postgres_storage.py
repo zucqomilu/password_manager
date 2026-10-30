@@ -213,13 +213,29 @@ def save_vault(data):
         connection.execute("DELETE FROM tags")
         connection.execute("DELETE FROM password_history")
         connection.execute("DELETE FROM entries")
-        for row in rows.entries:
-            upsert_entry(connection, row)
-        connection.cursor().executemany("INSERT INTO tags (username, label, position, tag) VALUES (%s, %s, %s, %s)",
-                                        [(row.username, row.label, row.position, row.tag) for row in rows.tags])
-        connection.cursor().executemany(
-            "INSERT INTO password_history (username, label, version, password, login) VALUES (%s, %s, %s, %s, %s)",
-            [(row.username, row.label, row.version, row.password, row.login) for row in rows.history])
+        insert_vault_rows(connection, rows)
+
+
+# Entries first, since tags reference them; the caller holds the transaction
+def insert_vault_rows(connection, rows):
+    for row in rows.entries:
+        upsert_entry(connection, row)
+    connection.cursor().executemany("INSERT INTO tags (username, label, position, tag) VALUES (%s, %s, %s, %s)",
+                                    [(row.username, row.label, row.position, row.tag) for row in rows.tags])
+    connection.cursor().executemany(
+        "INSERT INTO password_history (username, label, version, password, login) VALUES (%s, %s, %s, %s, %s)",
+        [(row.username, row.label, row.version, row.password, row.login) for row in rows.history])
+
+
+# users.json and vault.json into the database, all or nothing. Every record and label is converted before connecting,
+# so a v1 record or a tagged version is refused before anything is written. The JSON files are only read.
+def import_json(users, vault):
+    user_rows = tuple(user_record_to_row(username, record) for username, record in users.items())
+    rows = vault_to_rows(vault)
+    with connect() as connection, connection.transaction():
+        for row in user_rows:
+            insert_user(connection, row)
+        insert_vault_rows(connection, rows)
 
 
 def load_vault():

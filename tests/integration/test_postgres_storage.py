@@ -6,8 +6,8 @@ import psycopg
 import pytest
 
 from password_manager.postgres_storage import (
-    EntryRow, UserRow, apply_migrations, backup_vault, connect, fetch_entry, fetch_user, insert_user, load_vault, save_vault,
-    upsert_entry, user_record_to_row,
+    EntryRow, UserRow, apply_migrations, backup_vault, connect, fetch_entry, fetch_user, import_json, insert_user, load_vault,
+    save_vault, upsert_entry, user_record_to_row,
 )
 
 
@@ -147,3 +147,24 @@ def test_backup_vault_writes_a_vault_backup_json_of_the_stored_vault(postgres_da
     assert len(backups) == 1
     assert json.loads(backups[0].read_text()) == stored
     assert os.stat(backups[0]).st_mode & 0o777 == 0o600
+
+
+# The migration itself: users.json and vault.json as loaded go into an empty database, every user record field for
+# field (real v2 records, the fixture's tiny Argon2id costs) and the vault with its tags and kept versions unchanged
+@pytest.mark.integration
+def test_import_json_imports_users_entries_tags_and_history_in_one_transaction(postgres_database, monkeypatch, make_v2_user):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    users = {**make_v2_user("alice"), **make_v2_user("bob", salt=b"abcdefghijklmnop")}
+    vault = {
+        "alice": {
+            "github": {"password": token("pw-2"), "login": token("login-1"), "tags": ["work", "dev"]},
+            "github__v1": {"password": token("pw-1"), "login": token("login-1")},
+            "old-bank__v1": {"password": token("pw-3")},
+        },
+        "bob": {"bank": {"password": token("pw-4")}},
+    }
+    import_json(users, vault)
+    assert load_vault() == vault
+    with connect() as connection:
+        assert fetch_user(connection, "alice") == user_record_to_row("alice", users["alice"])
+        assert fetch_user(connection, "bob") == user_record_to_row("bob", users["bob"])
