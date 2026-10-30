@@ -134,3 +134,23 @@ def test_main_db_export_prints_export_jsons_refusal_and_writes_nothing(set_test_
     )
     assert [path.name for path in export_dir.iterdir()] == ["vault.json"]
     assert (export_dir / "vault.json").read_text() == '{"existing": {}}'
+
+
+# With PM_STORAGE=postgres and no server (conftest's PM_DATABASE_URL points at a socket dir nothing listens in), a
+# command ends with what happened and how to reach the passwords through the JSON files, never a traceback; the
+# database URL is not printed, and the JSON files are not touched
+@pytest.mark.integration
+def test_main_prints_fallback_instructions_when_postgres_is_unreachable(set_test_env, monkeypatch, capsys):
+    build_json_files(monkeypatch)
+    files = {name: open(os.path.join(set_test_env, name), "rb").read() for name in ("users.json", "vault.json")}
+    monkeypatch.setenv("PM_STORAGE", "postgres")
+    capsys.readouterr()
+
+    main(["list"])
+
+    assert capsys.readouterr().out == (
+        "Could not reach the Postgres database; nothing was read or changed.\n"
+        "To use the JSON files instead, run pm with PM_STORAGE unset. vault.json holds the vault as of pm db import;\n"
+        "changes made under Postgres since then are only in the database.\n"
+    )
+    assert {name: open(os.path.join(set_test_env, name), "rb").read() for name in files} == files

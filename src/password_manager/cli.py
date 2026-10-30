@@ -6,7 +6,7 @@ from .memory import harden_process
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
-from .postgres_storage import export_json, import_json, verify_import
+from .postgres_storage import DatabaseUnreachable, export_json, import_json, verify_import
 from .storage import get_storage, load_users, load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
@@ -220,3 +220,8 @@ def main(argv=None):
     except SessionLocked:
         logger.warning("Session expired during a command.")
         print("Your session has expired. Please run `login` and try again.")
+    except DatabaseUnreachable:
+        logger.error("Could not reach the Postgres database.")
+        print("Could not reach the Postgres database; nothing was read or changed.\n"
+              "To use the JSON files instead, run pm with PM_STORAGE unset. vault.json holds the vault as of pm db import;\n"
+              "changes made under Postgres since then are only in the database.")

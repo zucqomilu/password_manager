@@ -193,11 +193,19 @@ def fetch_entry(connection, username, label):
     return EntryRow(*found) if found else None
 
 
+# Raised by connect() in place of psycopg's error, whose text names the server; cli.py catches it without psycopg
+class DatabaseUnreachable(Exception):
+    pass
+
+
 # The only place psycopg is imported, so a JSON-only install (no postgres extra) never needs it.
 # The URL may hold a password: it goes to psycopg and nowhere else, never into a message or the log.
 def connect():
     import psycopg
-    connection = psycopg.connect(get_database_url())
+    try:
+        connection = psycopg.connect(get_database_url())
+    except psycopg.OperationalError as e:
+        raise DatabaseUnreachable() from e
     apply_migrations(connection)
     return connection
 
