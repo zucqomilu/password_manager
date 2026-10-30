@@ -241,6 +241,22 @@ def import_json(users, vault):
         insert_vault_rows(connection, rows)
 
 
+# Labels of username whose password or login decrypts differently in the database, or that the database lacks.
+# Plaintext is compared in memory only, as pm get does; only labels are returned, never a decrypted value.
+def verify_import(vault, username, cipher):
+    stored = load_vault().get(username, {})
+    return tuple(sorted(
+        label for label, entry in vault.get(username, {}).items()
+        if label not in stored or any(
+            decrypt_field(cipher, entry.get(field)) != decrypt_field(cipher, stored[label].get(field))
+            for field in ("password", "login"))
+    ))
+
+
+def decrypt_field(cipher, token):
+    return cipher.decrypt(token.encode()) if token is not None else None
+
+
 def load_vault():
     with connect() as connection:
         return rows_to_vault(VaultRows(

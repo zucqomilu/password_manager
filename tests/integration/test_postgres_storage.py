@@ -7,7 +7,7 @@ import pytest
 
 from password_manager.postgres_storage import (
     EntryRow, UserRow, apply_migrations, backup_vault, connect, fetch_entry, fetch_user, import_json, insert_user, load_vault,
-    save_vault, upsert_entry, user_record_to_row,
+    save_vault, upsert_entry, user_record_to_row, verify_import,
 )
 
 
@@ -197,3 +197,26 @@ def test_import_json_refuses_to_import_into_a_non_empty_database(postgres_databa
     assert load_vault() == vault
     with connect() as connection:
         assert fetch_user(connection, "bob") is None
+
+
+# The check pm db import runs before it reports success: every password and login of the logged-in user, kept
+# versions included, decrypted from both sides with the session cipher. A token re-encrypted from the same value still
+# counts as identical; a changed value or a missing label is reported by label, and no decrypted value is returned.
+@pytest.mark.integration
+def test_verify_import_confirms_every_json_entry_decrypts_identically_from_postgres(postgres_database, monkeypatch, make_v2_user, fernet):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    encrypt = lambda value: fernet.encrypt(value.encode()).decode()
+    vault = {"alice": {
+        "github": {"password": encrypt("pw-2"), "login": encrypt("alice@example.com"), "tags": ["work"]},
+        "github__v1": {"password": encrypt("pw-1")},
+        "mail": {"password": encrypt("pw-3")},
+        "bank": {"password": encrypt("pw-4")},
+    }}
+    import_json(make_v2_user("alice"), vault)
+    assert verify_import(vault, "alice", fernet) == ()
+    with connect() as connection:
+        connection.execute("UPDATE entries SET password = %s WHERE label = 'bank'", (encrypt("pw-4"),))
+        connection.execute("UPDATE entries SET login = %s WHERE label = 'github'", (encrypt("mallory@example.com"),))
+        connection.execute("UPDATE password_history SET password = %s WHERE label = 'github'", (encrypt("pw-x"),))
+        connection.execute("DELETE FROM entries WHERE label = 'mail'")
+    assert verify_import(vault, "alice", fernet) == ("github", "github__v1", "mail")
