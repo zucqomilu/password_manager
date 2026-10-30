@@ -310,3 +310,17 @@ def test_run_command_passes_get_storage_to_the_core_functions(args, command_func
          patch(f'password_manager.cli.{command_function}') as mock_command:
         run_cli_with_args(args)
     assert mock_command.call_args.kwargs["storage"] is storage
+
+
+# load_users() and load_vault() return None for a corrupt or invalid file. The import stops before import_json(), so
+# nothing reaches the database, and names the file; vault.log already has the details.
+@pytest.mark.unit
+@pytest.mark.parametrize("users, vault, name", [(None, {}, "users.json"), ({}, None, "vault.json")])
+def test_main_db_import_refuses_an_unreadable_users_json_or_vault_json(capsys, users, vault, name):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.load_users', return_value=users), \
+         patch('password_manager.cli.load_vault', return_value=vault), \
+         patch('password_manager.cli.import_json') as mock_import_json:
+        run_cli_with_args(['prog', 'db', 'import'])
+    mock_import_json.assert_not_called()
+    assert capsys.readouterr().out == f"Import failed: {name} could not be read (see vault.log); nothing was imported\n"

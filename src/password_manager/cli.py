@@ -32,6 +32,10 @@ def no_completions(**kwargs):
 # with their session, the only data key this process can use
 def import_to_postgres(username, fernet):
     users, vault = load_users(), load_vault()
+    if users is None or vault is None:
+        print(f"Import failed: {'users.json' if users is None else 'vault.json'} could not be read (see vault.log); "
+              "nothing was imported")
+        return
     try:
         import_json(users, vault)
     except ValueError as e:
