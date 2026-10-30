@@ -271,7 +271,11 @@ def load_vault():
 
 # The JSON backend's two files in directory, written 0600 like the originals: the vault as stored here and the users
 # as given (users.json is where they live). An export never decrypts anything: the tokens and wrapped keys are copied.
+# It never overwrites either: a directory that already has one of the files, such as the live data dir, is refused.
 def export_json(directory, users):
+    existing = [name for name in ("users.json", "vault.json") if os.path.exists(os.path.join(directory, name))]
+    if existing:
+        raise ValueError(f"'{directory}' already has {existing[0]}; export only into a directory without users.json or vault.json")
     storage.write_json_atomically(os.path.join(directory, "users.json"), users)
     storage.write_json_atomically(os.path.join(directory, "vault.json"), load_vault())
 

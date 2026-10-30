@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 
 import psycopg
 import pytest
@@ -245,3 +246,18 @@ def test_export_json_writes_files_the_json_backend_can_log_in_with(postgres_data
     monkeypatch.setenv("VAULT_FILE", str(tmp_path / "vault.json"))
     assert storage.load_vault() == vault
     assert Fernet(authenticate_user("alice", "alice_wonderland")).decrypt(storage.load_vault()["alice"]["github"]["password"].encode()) == b"pw-2"
+
+
+# An export never overwrites: pointed at a directory that has either file, such as the live data dir, it writes
+# neither, so the file already there (here a stand-in, not a real vault) is left byte for byte as it was
+@pytest.mark.integration
+@pytest.mark.parametrize("name", ["users.json", "vault.json"])
+def test_export_json_refuses_a_directory_that_already_has_users_json_or_vault_json(postgres_database, monkeypatch, make_v2_user, tmp_path, name):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    users = make_v2_user("alice")
+    import_json(users, {"alice": {"github": {"password": token("pw-1")}}})
+    (tmp_path / name).write_text('{"existing": {}}')
+    with pytest.raises(ValueError, match=rf"^'{re.escape(str(tmp_path))}' already has {name}; export only into a directory without users.json or vault.json$"):
+        export_json(tmp_path, users)
+    assert [path.name for path in tmp_path.iterdir()] == [name]
+    assert (tmp_path / name).read_text() == '{"existing": {}}'
