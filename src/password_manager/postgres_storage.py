@@ -233,6 +233,9 @@ def import_json(users, vault):
     user_rows = tuple(user_record_to_row(username, record) for username, record in users.items())
     rows = vault_to_rows(vault)
     with connect() as connection, connection.transaction():
+        if connection.execute("SELECT EXISTS (SELECT 1 FROM users) OR EXISTS (SELECT 1 FROM entries) "
+                              "OR EXISTS (SELECT 1 FROM password_history)").fetchone()[0]:
+            raise ValueError("The database already holds a vault; pm db import only fills an empty database")
         for row in user_rows:
             insert_user(connection, row)
         insert_vault_rows(connection, rows)

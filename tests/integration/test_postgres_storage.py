@@ -183,3 +183,17 @@ def test_import_json_rolls_back_entirely_on_failure(postgres_database, monkeypat
     with connect() as connection:
         assert fetch_user(connection, "alice") is None
         assert fetch_user(connection, "bob") is None
+
+
+# An import never merges: bob's rows would not collide with alice's, so only the check stops them mixing into an
+# existing vault. The refusal leaves the database exactly as it was.
+@pytest.mark.integration
+def test_import_json_refuses_to_import_into_a_non_empty_database(postgres_database, monkeypatch, make_v2_user):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    vault = {"alice": {"github": {"password": token("pw-1")}}}
+    import_json(make_v2_user("alice"), vault)
+    with pytest.raises(ValueError, match=r"^The database already holds a vault; pm db import only fills an empty database$"):
+        import_json(make_v2_user("bob"), {"bob": {"bank": {"password": token("pw-2")}}})
+    assert load_vault() == vault
+    with connect() as connection:
+        assert fetch_user(connection, "bob") is None
