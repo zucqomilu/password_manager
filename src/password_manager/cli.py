@@ -6,7 +6,7 @@ from .memory import harden_process
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
-from .postgres_storage import import_json, verify_import
+from .postgres_storage import export_json, import_json, verify_import
 from .storage import get_storage, load_users, load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
@@ -51,6 +51,11 @@ def import_to_postgres(username, fernet):
         print(f"Differs in Postgres: {label}")
     if problems:
         print("Keep using the JSON files (leave PM_STORAGE unset); users.json and vault.json are unchanged")
+
+# pm db export: the database's vault and the users as users.json holds them, into a directory without either file
+def export_from_postgres(directory):
+    export_json(directory, load_users())
+    print(f"Exported users.json and vault.json to {directory}")
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
@@ -107,6 +112,8 @@ def build_parser():
     db_parser = subparsers.add_parser('db', help='Move the vault between the JSON files and Postgres')
     db_subparsers = db_parser.add_subparsers(dest='db_command', required=True)
     db_subparsers.add_parser('import', help='Copy users.json and vault.json into an empty Postgres database')
+    db_export_parser = db_subparsers.add_parser('export', help='Write the Postgres vault and users.json into a directory')
+    db_export_parser.add_argument('directory', help='Directory without users.json or vault.json')
 
     # === COMPLETION ===
     subparsers.add_parser('completion', help='Print the bash completion script')
@@ -143,8 +150,10 @@ def run_command(parser, args, username, fernet):
             print(f"Password failed to decrypt: {label}")
         for label in result["bad_login"]:
             print(f"Login failed to decrypt: {label}")
-    elif args.command == 'db':
+    elif args.command == 'db' and args.db_command == 'import':
         import_to_postgres(username, fernet)
+    elif args.command == 'db':
+        export_from_postgres(args.directory)
     else:
         parser.print_help()
 

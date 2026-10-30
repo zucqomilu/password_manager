@@ -1,5 +1,6 @@
 import builtins
 import dataclasses
+import json
 import os
 
 import pytest
@@ -90,3 +91,25 @@ def test_main_db_import_prints_import_jsons_refusal_and_writes_nothing(set_test_
     with postgres_storage.connect() as connection:
         assert postgres_storage.fetch_user(connection, "alice") is None
     assert {name: open(os.path.join(set_test_env, name), "rb").read() for name in files} == files
+
+
+# The way back to JSON: after an import, a label saved under PM_STORAGE=postgres exists only in the database, and
+# pm db export writes it out with the rest, next to users.json as the JSON backend holds it, both 0600
+@pytest.mark.integration
+def test_main_db_export_writes_json_files_to_the_given_directory(set_test_env, postgres_database, monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    build_json_files(monkeypatch)
+    main(["db", "import"])
+    monkeypatch.setenv("PM_STORAGE", "postgres")
+    main(["set", "mail", "--password", "test-only-pass-4"])
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    capsys.readouterr()
+
+    main(["db", "export", str(export_dir)])
+
+    assert capsys.readouterr().out == f"Exported users.json and vault.json to {export_dir}\n"
+    assert {path.name: os.stat(path).st_mode & 0o777 for path in export_dir.iterdir()} == {"users.json": 0o600, "vault.json": 0o600}
+    assert json.loads((export_dir / "vault.json").read_text()) == postgres_storage.load_vault()
+    assert "mail" in json.loads((export_dir / "vault.json").read_text())["alice"]
+    assert json.loads((export_dir / "users.json").read_text()) == storage.load_users()
