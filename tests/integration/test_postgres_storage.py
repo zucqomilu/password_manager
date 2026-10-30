@@ -168,3 +168,18 @@ def test_import_json_imports_users_entries_tags_and_history_in_one_transaction(p
     with connect() as connection:
         assert fetch_user(connection, "alice") == user_record_to_row("alice", users["alice"])
         assert fetch_user(connection, "bob") == user_record_to_row("bob", users["bob"])
+
+
+# All or nothing: the users and entries go in first, then a history row the schema rejects (version 0) fails the
+# import, and nothing it wrote is left behind, so a retry after fixing vault.json starts from an empty database again
+@pytest.mark.integration
+def test_import_json_rolls_back_entirely_on_failure(postgres_database, monkeypatch, make_v2_user):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    users = {**make_v2_user("alice"), **make_v2_user("bob", salt=b"abcdefghijklmnop")}
+    vault = {"alice": {"github": {"password": token("pw-2"), "tags": ["work"]}, "github__v0": {"password": token("pw-1")}}}
+    with pytest.raises(psycopg.errors.CheckViolation):
+        import_json(users, vault)
+    assert load_vault() == {}
+    with connect() as connection:
+        assert fetch_user(connection, "alice") is None
+        assert fetch_user(connection, "bob") is None
