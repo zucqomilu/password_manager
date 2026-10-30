@@ -32,7 +32,11 @@ def no_completions(**kwargs):
 # with their session, the only data key this process can use
 def import_to_postgres(username, fernet):
     users, vault = load_users(), load_vault()
-    import_json(users, vault)
+    try:
+        import_json(users, vault)
+    except ValueError as e:
+        print(f"Import failed: {e}")
+        return
     labels = [label for entries in vault.values() for label in entries]
     versions = sum(map(is_versioned_backup, labels))
     print(f"Imported into Postgres: {len(users)} users, {len(labels) - versions} entries, {versions} kept versions")

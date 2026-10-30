@@ -68,3 +68,25 @@ def test_main_db_import_lists_the_labels_that_differ_in_postgres(set_test_env, p
         "Differs in Postgres: gitlab\n"
         "Keep using the JSON files (leave PM_STORAGE unset); users.json and vault.json are unchanged\n"
     )
+
+
+# import_json()'s refusals are messages, not tracebacks: a tagged kept version stops the import before it connects,
+# the reason and its fix are printed, and the database and both JSON files are left exactly as they were
+@pytest.mark.integration
+def test_main_db_import_prints_import_jsons_refusal_and_writes_nothing(set_test_env, postgres_database, monkeypatch, capsys):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    build_json_files(monkeypatch)
+    main(["set", "github__v1", "--tag", "old"])
+    files = {name: open(os.path.join(set_test_env, name), "rb").read() for name in ("users.json", "vault.json")}
+    capsys.readouterr()
+
+    main(["db", "import"])
+
+    assert capsys.readouterr().out == (
+        "Import failed: 'github__v1' is an old password version and has tags; "
+        "remove them with `pm remove github__v1 --tag old` first\n"
+    )
+    assert postgres_storage.load_vault() == {}
+    with postgres_storage.connect() as connection:
+        assert postgres_storage.fetch_user(connection, "alice") is None
+    assert {name: open(os.path.join(set_test_env, name), "rb").read() for name in files} == files
