@@ -113,3 +113,24 @@ def test_main_db_export_writes_json_files_to_the_given_directory(set_test_env, p
     assert json.loads((export_dir / "vault.json").read_text()) == postgres_storage.load_vault()
     assert "mail" in json.loads((export_dir / "vault.json").read_text())["alice"]
     assert json.loads((export_dir / "users.json").read_text()) == storage.load_users()
+
+
+# export_json()'s refusal is a message, not a traceback: a directory that already has vault.json (here a stand-in,
+# as the live data dir would have the real one) gets neither file, and the one there stays byte for byte as it was
+@pytest.mark.integration
+def test_main_db_export_prints_export_jsons_refusal_and_writes_nothing(set_test_env, postgres_database, monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    build_json_files(monkeypatch)
+    main(["db", "import"])
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    (export_dir / "vault.json").write_text('{"existing": {}}')
+    capsys.readouterr()
+
+    main(["db", "export", str(export_dir)])
+
+    assert capsys.readouterr().out == (
+        f"Export failed: '{export_dir}' already has vault.json; export only into a directory without users.json or vault.json\n"
+    )
+    assert [path.name for path in export_dir.iterdir()] == ["vault.json"]
+    assert (export_dir / "vault.json").read_text() == '{"existing": {}}'

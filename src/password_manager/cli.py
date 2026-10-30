@@ -54,7 +54,11 @@ def import_to_postgres(username, fernet):
 
 # pm db export: the database's vault and the users as users.json holds them, into a directory without either file
 def export_from_postgres(directory):
-    export_json(directory, load_users())
+    try:
+        export_json(directory, load_users())
+    except ValueError as e:
+        print(f"Export failed: {e}")
+        return
     print(f"Exported users.json and vault.json to {directory}")
 
 def build_parser():
