@@ -6,7 +6,8 @@ from .memory import harden_process
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
-from .storage import get_storage, load_vault
+from .postgres_storage import import_json, verify_import
+from .storage import get_storage, load_users, load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
 # so this never decrypts and never touches the keyring session or users.json.
@@ -26,6 +27,17 @@ def complete_label_tags(parsed_args, **kwargs):
 # Tab-completion for arguments that must not suggest anything (new labels, passwords, logins, usernames), instead of file names
 def no_completions(**kwargs):
     return []
+
+# pm db import reads the JSON files whatever PM_STORAGE says, and only reads them; the user's entries are then checked
+# with their session, the only data key this process can use
+def import_to_postgres(username, fernet):
+    users, vault = load_users(), load_vault()
+    import_json(users, vault)
+    labels = [label for entries in vault.values() for label in entries]
+    versions = sum(map(is_versioned_backup, labels))
+    print(f"Imported into Postgres: {len(users)} users, {len(labels) - versions} entries, {versions} kept versions")
+    print(f"Verified {username}'s entries: {len(vault.get(username, {})) - len(verify_import(vault, username, fernet))} "
+          f"of {len(vault.get(username, {}))} decrypt identically from Postgres")
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Password Manager CLI")
@@ -78,6 +90,11 @@ def build_parser():
     # === VERIFY ===
     subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')
 
+    # === DB ===
+    db_parser = subparsers.add_parser('db', help='Move the vault between the JSON files and Postgres')
+    db_subparsers = db_parser.add_subparsers(dest='db_command', required=True)
+    db_subparsers.add_parser('import', help='Copy users.json and vault.json into an empty Postgres database')
+
     # === COMPLETION ===
     subparsers.add_parser('completion', help='Print the bash completion script')
 
@@ -113,6 +130,8 @@ def run_command(parser, args, username, fernet):
             print(f"Password failed to decrypt: {label}")
         for label in result["bad_login"]:
             print(f"Login failed to decrypt: {label}")
+    elif args.command == 'db':
+        import_to_postgres(username, fernet)
     else:
         parser.print_help()
 
