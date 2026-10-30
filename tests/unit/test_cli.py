@@ -324,3 +324,15 @@ def test_main_db_import_refuses_an_unreadable_users_json_or_vault_json(capsys, u
         run_cli_with_args(['prog', 'db', 'import'])
     mock_import_json.assert_not_called()
     assert capsys.readouterr().out == f"Import failed: {name} could not be read (see vault.log); nothing was imported\n"
+
+
+# load_users() returns None for a corrupt or invalid users.json. Exporting that would write a users.json holding null,
+# which no one can log in with, so the export stops before export_json() and names the file; vault.log has the details.
+@pytest.mark.unit
+def test_main_db_export_refuses_an_unreadable_users_json(capsys):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.load_users', return_value=None), \
+         patch('password_manager.cli.export_json') as mock_export_json:
+        run_cli_with_args(['prog', 'db', 'export', 'some-dir'])
+    mock_export_json.assert_not_called()
+    assert capsys.readouterr().out == "Export failed: users.json could not be read (see vault.log); nothing was exported\n"
