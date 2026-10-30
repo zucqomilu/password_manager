@@ -269,6 +269,13 @@ def load_vault():
         ))
 
 
+# The JSON backend's two files in directory, written 0600 like the originals: the vault as stored here and the users
+# as given (users.json is where they live). An export never decrypts anything: the tokens and wrapped keys are copied.
+def export_json(directory, users):
+    storage.write_json_atomically(os.path.join(directory, "users.json"), users)
+    storage.write_json_atomically(os.path.join(directory, "vault.json"), load_vault())
+
+
 # A JSON copy of the stored vault, where the JSON backend keeps its backups: pm delete and an overwrite call this first,
 # so the current password of a deleted label survives as it does under JSON. Written 0600 like vault.json.
 def backup_vault():

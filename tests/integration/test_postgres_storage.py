@@ -5,10 +5,14 @@ import os
 import psycopg
 import pytest
 
+from cryptography.fernet import Fernet
+
+from password_manager import storage
 from password_manager.postgres_storage import (
-    EntryRow, UserRow, apply_migrations, backup_vault, connect, fetch_entry, fetch_user, import_json, insert_user, load_vault,
-    save_vault, upsert_entry, user_record_to_row, verify_import,
+    EntryRow, UserRow, apply_migrations, backup_vault, connect, export_json, fetch_entry, fetch_user, import_json, insert_user,
+    load_vault, save_vault, upsert_entry, user_record_to_row, verify_import,
 )
+from password_manager.user import authenticate_user
 
 
 # A placeholder in the shape validate_vault() accepts for a Fernet token (url-safe base64); it encrypts nothing
@@ -220,3 +224,24 @@ def test_verify_import_confirms_every_json_entry_decrypts_identically_from_postg
         connection.execute("UPDATE password_history SET password = %s WHERE label = 'github'", (encrypt("pw-x"),))
         connection.execute("DELETE FROM entries WHERE label = 'mail'")
     assert verify_import(vault, "alice", fernet) == ("github", "github__v1", "mail")
+
+
+# The way back: the Postgres vault and the users as users.json holds them are written as users.json and vault.json
+# (0600) into a directory, and the JSON backend pointed there logs alice in with her master password and decrypts
+# her password. The dummy password and values are test placeholders.
+@pytest.mark.integration
+def test_export_json_writes_files_the_json_backend_can_log_in_with(postgres_database, monkeypatch, make_v2_user, tmp_path):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    data_key = Fernet.generate_key()
+    users = make_v2_user("alice", password="alice_wonderland", data_key=data_key)
+    vault = {"alice": {
+        "github": {"password": Fernet(data_key).encrypt(b"pw-2").decode(), "tags": ["work"]},
+        "github__v1": {"password": Fernet(data_key).encrypt(b"pw-1").decode()},
+    }}
+    import_json(users, vault)
+    export_json(tmp_path, users)
+    assert {path.name: os.stat(path).st_mode & 0o777 for path in tmp_path.iterdir()} == {"users.json": 0o600, "vault.json": 0o600}
+    monkeypatch.setenv("USERS_FILE", str(tmp_path / "users.json"))
+    monkeypatch.setenv("VAULT_FILE", str(tmp_path / "vault.json"))
+    assert storage.load_vault() == vault
+    assert Fernet(authenticate_user("alice", "alice_wonderland")).decrypt(storage.load_vault()["alice"]["github"]["password"].encode()) == b"pw-2"
