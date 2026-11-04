@@ -2,7 +2,7 @@ import argparse
 import pytest
 import re
 import sys
-from unittest.mock import Mock, call, patch
+from unittest.mock import ANY, Mock, call, patch
 from password_manager import cli
 from password_manager.session import SessionLocked
 
@@ -62,7 +62,7 @@ def test_generate_command():
         mock_save_password.return_value = True
         run_cli_with_args(['prog', 'generate', 'mylabel', '--length', '20'])
         mock_generate_password.assert_called_once_with(20)
-        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='password123!', login=None)
+        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='password123!', login=None, storage=ANY)
 
 
 @pytest.mark.unit
@@ -71,7 +71,7 @@ def test_set_command_success():
          patch('password_manager.cli.save_password') as mock_save_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'set', 'mylabel', '--password', 'mypassword', '--login', 'testuser@example.com'])
-        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='mypassword', login='testuser@example.com', tags=None)
+        mock_save_password.assert_called_once_with('testuser', 'mylabel', b'fernet', password='mypassword', login='testuser@example.com', tags=None, storage=ANY)
 
 
 @pytest.mark.unit
@@ -91,7 +91,7 @@ def test_get_command():
          patch('password_manager.cli.get_password') as mock_get_password:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'get', 'mylabel', '--show'])
-        mock_get_password.assert_called_once_with('testuser', 'mylabel', b'fernet', show=True)
+        mock_get_password.assert_called_once_with('testuser', 'mylabel', b'fernet', show=True, storage=ANY)
 
 
 @pytest.mark.unit
@@ -100,7 +100,7 @@ def test_list_command():
          patch('password_manager.cli.list_labels') as mock_list_labels:
         mock_load_session.return_value = ('testuser', b'fernet')
         run_cli_with_args(['prog', 'list'])
-        mock_list_labels.assert_called_once_with('testuser', b'fernet', tags=None)
+        mock_list_labels.assert_called_once_with('testuser', b'fernet', tags=None, storage=ANY)
 
 
 @pytest.mark.unit
@@ -150,7 +150,8 @@ def test_set_command_with_tag():
             b'fernet',
             password=None,
             login=None,
-            tags=['droppshipping']
+            tags=['droppshipping'],
+            storage=ANY,
         )
 
 
@@ -165,7 +166,8 @@ def test_list_command_with_tag():
         mock_list_labels.assert_called_once_with(
             'testuser',
             b'fernet',
-            tags=['droppshipping']
+            tags=['droppshipping'],
+            storage=ANY,
         )
 
 
@@ -180,7 +182,8 @@ def test_list_command_with_multiple_tags():
         mock_list_labels.assert_called_once_with(
             'testuser',
             b'fernet',
-            tags=['droppshipping', 'economy']
+            tags=['droppshipping', 'economy'],
+            storage=ANY,
         )
 
 
@@ -195,7 +198,8 @@ def test_remove_command_with_tag():
         mock_remove_tags.assert_called_once_with(
             'testuser',
             'github',
-            tags=['development']
+            tags=['development'],
+            storage=ANY,
         )
 
 
@@ -211,7 +215,8 @@ def test_remove_command_with_multiple_tags():
         mock_remove_tags.assert_called_once_with(
             'testuser',
             'github',
-            tags=['development', 'work']
+            tags=['development', 'work'],
+            storage=ANY,
         )
 
 
@@ -220,7 +225,7 @@ def test_verify_command_prints_verification_summary(capsys):
     with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
          patch('password_manager.cli.verify_vault', return_value={"ok": 2, "bad_password": ["gitlab"], "bad_login": ["github"]}) as mock_verify_vault:
         run_cli_with_args(['prog', 'verify'])
-        mock_verify_vault.assert_called_once_with('testuser', b'fernet')
+        mock_verify_vault.assert_called_once_with('testuser', b'fernet', storage=ANY)
         assert capsys.readouterr().out == (
             "2 entries OK\n"
             "Password failed to decrypt: gitlab\n"
@@ -241,13 +246,13 @@ def test_delete_command_calls_delete_label_for_given_label():
     with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
          patch('password_manager.cli.delete_label') as mock_delete_label:
         run_cli_with_args(['prog', 'delete', 'github'])
-        mock_delete_label.assert_called_once_with('testuser', 'github')
+        mock_delete_label.assert_called_once_with('testuser', 'github', storage=ANY)
 
 
 @pytest.mark.unit
 def test_build_parser_returns_parser_with_every_subcommand():
     assert re.search(r"\{(.+?)\}", cli.build_parser().format_help()).group(1).split(",") == [
-        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "completion",
+        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "db", "completion",
     ]
 
 
@@ -285,3 +290,49 @@ def test_main_calls_harden_process_before_handling_commands(set_test_env, monkey
     cli.main(["register", "--username", "testuser"])
 
     assert calls.mock_calls[:2] == [call.harden_process(), call.getpass("Choose a master password: ")]
+
+
+# PM_STORAGE only takes effect if every vault command hands get_storage() to its core function
+@pytest.mark.unit
+@pytest.mark.parametrize("args, command_function", [
+    (['prog', 'generate', 'mylabel'], 'save_password'),
+    (['prog', 'set', 'mylabel', '--password', 'mypassword'], 'save_password'),
+    (['prog', 'get', 'mylabel'], 'get_password'),
+    (['prog', 'remove', 'mylabel', '--tag', 'work'], 'remove_tags'),
+    (['prog', 'delete', 'mylabel'], 'delete_label'),
+    (['prog', 'list'], 'list_labels'),
+    (['prog', 'verify'], 'verify_vault'),
+])
+def test_run_command_passes_get_storage_to_the_core_functions(args, command_function):
+    storage = Mock()
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.get_storage', return_value=storage), \
+         patch(f'password_manager.cli.{command_function}') as mock_command:
+        run_cli_with_args(args)
+    assert mock_command.call_args.kwargs["storage"] is storage
+
+
+# load_users() and load_vault() return None for a corrupt or invalid file. The import stops before import_json(), so
+# nothing reaches the database, and names the file; vault.log already has the details.
+@pytest.mark.unit
+@pytest.mark.parametrize("users, vault, name", [(None, {}, "users.json"), ({}, None, "vault.json")])
+def test_main_db_import_refuses_an_unreadable_users_json_or_vault_json(capsys, users, vault, name):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.load_users', return_value=users), \
+         patch('password_manager.cli.load_vault', return_value=vault), \
+         patch('password_manager.cli.import_json') as mock_import_json:
+        run_cli_with_args(['prog', 'db', 'import'])
+    mock_import_json.assert_not_called()
+    assert capsys.readouterr().out == f"Import failed: {name} could not be read (see vault.log); nothing was imported\n"
+
+
+# load_users() returns None for a corrupt or invalid users.json. Exporting that would write a users.json holding null,
+# which no one can log in with, so the export stops before export_json() and names the file; vault.log has the details.
+@pytest.mark.unit
+def test_main_db_export_refuses_an_unreadable_users_json(capsys):
+    with patch('password_manager.cli.load_session', return_value=('testuser', b'fernet')), \
+         patch('password_manager.cli.load_users', return_value=None), \
+         patch('password_manager.cli.export_json') as mock_export_json:
+        run_cli_with_args(['prog', 'db', 'export', 'some-dir'])
+    mock_export_json.assert_not_called()
+    assert capsys.readouterr().out == "Export failed: users.json could not be read (see vault.log); nothing was exported\n"

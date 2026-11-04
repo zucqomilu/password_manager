@@ -34,6 +34,11 @@ def get_socket_path():
 # Longest socket path the kernel accepts, in bytes: Linux's sun_path holds 108, including the closing NUL
 MAX_SOCKET_PATH = 107
 
+# pm's own database over the local socket: no host and no password, so peer authentication admits the logged-in user.
+# A PM_DATABASE_URL override may hold a password, so the URL is never printed or logged.
+def get_database_url():
+    return os.environ.get("PM_DATABASE_URL") or "postgresql:///password_manager"
+
 # Keyring
 KEYRING_SERVICE = "password_manager"
 KEYRING_ACCOUNT = "session"

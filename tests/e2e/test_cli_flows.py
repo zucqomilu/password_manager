@@ -483,3 +483,42 @@ def test_e2e_session_activity_is_refreshed(capsys, set_test_env, fake_agent, tes
     capsys.readouterr()
 
     assert fake_agent["state"].last_activity > before
+
+
+# The whole round trip through Postgres and back, as you would run it: JSON files imported, passwords set, changed and
+# read under PM_STORAGE=postgres, exported, and the export used as the JSON backend's files after a fresh login, with
+# every password readable, the Postgres-only ones included. The passwords are test placeholders.
+@pytest.mark.e2e
+def test_register_login_set_and_get_on_postgres_export_and_log_in_on_json(set_test_env, postgres_database, monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    register_and_login("alice", "alice_wonderland", capsys, main)
+    main(["set", "github", "--password", "test-only-pass-1", "--login", "alice@example.com"])
+    main(["db", "import"])
+
+    monkeypatch.setenv("PM_STORAGE", "postgres")
+    main(["set", "gitlab", "--password", "test-only-pass-2", "--tag", "work"])
+    with patch("builtins.input", return_value="y"):
+        main(["set", "github", "--password", "test-only-pass-3"])
+    capsys.readouterr()
+    with patch("pyperclip.copy"):
+        main(["get", "gitlab", "--show"])
+    assert "Password: test-only-pass-2" in capsys.readouterr().out
+
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    main(["db", "export", str(export_dir)])
+
+    monkeypatch.delenv("PM_STORAGE")
+    monkeypatch.setenv("USERS_FILE", str(export_dir / "users.json"))
+    monkeypatch.setenv("VAULT_FILE", str(export_dir / "vault.json"))
+    main(["logout"])
+    main(["login", "--username", "alice", "--password", "alice_wonderland"])
+    capsys.readouterr()
+    with patch("pyperclip.copy"):
+        main(["get", "github", "--show"])
+        main(["get", "gitlab", "--show"])
+    out = capsys.readouterr().out
+    assert "Password: test-only-pass-3" in out
+    assert "Password: test-only-pass-2" in out
+    main(["verify"])
+    assert capsys.readouterr().out == "3 entries OK\n"

@@ -4,7 +4,7 @@ import secrets
 import pyperclip
 from cryptography.fernet import InvalidToken
 from .logger import logger
-from .storage import load_vault, backup_vault, save_vault
+from .storage import Storage, load_vault, backup_vault, save_vault
 
 
 def is_versioned_backup(label):
@@ -16,10 +16,16 @@ def generate_password(length=16):
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
-def save_password(username, label, fernet, password=None, login=None, tags=None):
+# The JSON storage, built from this module's own names at call time so patches of core.load_vault and the others apply
+def json_storage():
+    return Storage(load_vault=load_vault, save_vault=save_vault, backup_vault=backup_vault)
+
+
+def save_password(username, label, fernet, password=None, login=None, tags=None, storage=None):
     logger.info(f"Attempting to save password for '{label}'.")
 
-    vault = load_vault()
+    store = storage or json_storage()
+    vault = store.load_vault()
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
         logger.error("Vault loading failed: returned None.")
@@ -56,7 +62,7 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
             logger.info(f"Overwriting password for '{label}' (backup saved as '{versioned_label}').")
             print(f"Backed up previous password to '{versioned_label}'.")
 
-            backup_vault()
+            store.backup_vault()
 
         # Only an old password that will not decrypt is reported as a wrong master password;
         # SessionLocked and a failed backup propagate, and either way nothing is saved
@@ -79,7 +85,7 @@ def save_password(username, label, fernet, password=None, login=None, tags=None)
                 existing_entry["tags"].append(tag)
 
     vault_data[label] = existing_entry
-    save_vault(vault)
+    store.save_vault(vault)
     
     logger.info(f"Credentials saved for '{label}'.")
     print(f"Saved credentials for '{label}'.")
@@ -99,10 +105,10 @@ def copy_to_clipboard(label, password):
         print(f"Could not copy the password for '{label}' to the clipboard.")
 
 
-def get_password(username, label, fernet, show=False):
+def get_password(username, label, fernet, show=False, storage=None):
     logger.info(f"Attempting to retrieve password for '{label}'.")
     
-    vault = load_vault()
+    vault = (storage or json_storage()).load_vault()
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
         logger.error("Vault loading failed: returned None.")
@@ -131,10 +137,10 @@ def get_password(username, label, fernet, show=False):
         print(f"No password found for '{label}'.")
 
 
-def list_labels(username, fernet, tags=None):
+def list_labels(username, fernet, tags=None, storage=None):
     logger.info("Listing all stored password labels.")
     
-    vault = load_vault()
+    vault = (storage or json_storage()).load_vault()
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
         logger.error("Vault loading failed: returned None.")
@@ -174,8 +180,9 @@ def list_labels(username, fernet, tags=None):
             print(f"No passwords found with tags: {', '.join(tags)}.")
 
 
-def remove_tags(username, label, tags):
-    vault = load_vault()
+def remove_tags(username, label, tags, storage=None):
+    store = storage or json_storage()
+    vault = store.load_vault()
 
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
@@ -202,7 +209,7 @@ def remove_tags(username, label, tags):
     if not existing_tags:
         entry.pop("tags", None)
 
-    save_vault(vault)
+    store.save_vault(vault)
 
 
 def decrypts(fernet, token):
@@ -214,8 +221,8 @@ def decrypts(fernet, token):
 
 
 # Check every entry, versioned backups included, without ever returning or logging a decrypted value
-def verify_vault(username, fernet):
-    vault = load_vault()
+def verify_vault(username, fernet, storage=None):
+    vault = (storage or json_storage()).load_vault()
     if vault is None:
         return None
     entries = vault.get(username, {})
@@ -224,8 +231,9 @@ def verify_vault(username, fernet):
     return {"ok": len(entries.keys() - {*bad_password, *bad_login}), "bad_password": bad_password, "bad_login": bad_login}
 
 
-def delete_label(username, label):
-    vault = load_vault()
+def delete_label(username, label, storage=None):
+    store = storage or json_storage()
+    vault = store.load_vault()
     if vault is None:
         print("Failed to load password vault. The vault may be corrupted or unreadable.")
         logger.error("Vault loading failed: returned None.")
@@ -236,5 +244,5 @@ def delete_label(username, label):
     if input(f"Delete '{label}'? A backup is made first. (y/N): ").strip().lower() != 'y':
         print("Operation cancelled.")
         return
-    backup_vault()
-    save_vault({**vault, username: {name: entry for name, entry in vault[username].items() if name != label}})
+    store.backup_vault()
+    store.save_vault({**vault, username: {name: entry for name, entry in vault[username].items() if name != label}})

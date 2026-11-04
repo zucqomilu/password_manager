@@ -23,7 +23,8 @@ The project is currently intended for **learning and personal use**, with the lo
 * Sessions held by a per-user agent process: the data key stays in memory, never on disk or in the keyring
 * Best-effort memory hardening: no core dumps, no memory reads by other processes, the agent's key kept out of swap and zeroed when the session ends
 * 15-minute session expiration, extended each time a password is encrypted or decrypted
-* JSON-based storage
+* JSON-based storage, with an optional PostgreSQL backend for the vault (`PM_STORAGE=postgres`)
+* `pm db import` and `pm db export` move the vault between the JSON files and PostgreSQL, verified and all-or-nothing
 * Storage validation to detect malformed or corrupted data
 * Comprehensive automated test suite
 * 100% test coverage of the `password_manager` package
@@ -154,7 +155,7 @@ This is best effort. Python and the `cryptography` library keep short-lived copi
 
 ## Storage
 
-The application currently uses JSON files for persistent application data.
+By default the application uses JSON files for persistent application data. The vault can also be kept in PostgreSQL; see [PostgreSQL storage](#postgresql-storage).
 
 All files are stored in the data directory, which is created with `0700` permissions (only your user can open it):
 
@@ -242,6 +243,20 @@ Application logging is written to `vault.log` in the data directory.
 
 The log contains operational information useful for debugging and auditing application behavior. Sensitive credential values should not be stored in the log.
 
+### PostgreSQL storage
+
+With `PM_STORAGE=postgres` (exactly that value), the vault is read from and saved to a PostgreSQL database instead of `vault.json`. Without it, or with any other value, `pm` uses the JSON files.
+
+* **Only the vault moves.** Users stay in `users.json`: registering and logging in work exactly as before. The database's `users` table is only filled by `pm db import`.
+* **The same encrypted values.** The database holds the same Fernet tokens as `vault.json`, and tags in plain text as before. Nothing is decrypted to store it.
+* **Tables:** `entries` (one row per label), `tags` (one row per tag, in order), `password_history` (one row per `__vN` version), `users` and `schema_migrations`. The schema is created on the first connection.
+* **Whole-vault saves.** Every save rewrites the vault in one transaction, as `vault.json` is rewritten whole, so a failure leaves the previous rows. The same validation as for `vault.json` runs first.
+* **Backups stay JSON.** An overwrite or `pm delete` still writes `vault_backup_YYYYMMDD_HHMMSS_ffffff.json` (`0600`) into the data directory, holding the stored vault.
+* **Connection:** `postgresql:///password_manager` by default: the local socket, with no host and no password, so peer authentication admits your own user. `PM_DATABASE_URL` overrides it. The URL may hold a password, so it is never printed or logged.
+* **Unreachable database.** If the server cannot be reached, the command stops before reading or changing anything and explains how to fall back to the JSON files.
+
+`vault.json` is never written while `PM_STORAGE=postgres` is set. It keeps the vault as of `pm db import`, so changes made under PostgreSQL since then are only in the database until you run `pm db export`.
+
 ## Requirements
 
 * Linux (the session agent and the memory hardening use Linux-only system calls; on any other platform `pm` stops with "pm only supports Linux.")
@@ -259,6 +274,8 @@ pyperclip==1.11.0
 keyring==25.7.0
 argcomplete==3.7.2
 ```
+
+Optional, for the PostgreSQL backend (the `postgres` extra): a PostgreSQL server and `psycopg[binary]==3.3.6`. `pm` imports `psycopg` only when it connects to the database, so a JSON-only install does not need it.
 
 ## Installation
 
@@ -289,6 +306,25 @@ pip install -e ".[dev]"
 
 This installs the `pm` command into the virtual environment.
 
+### PostgreSQL (optional)
+
+Install the `postgres` extra (the `dev` extra already includes `psycopg`):
+
+```bash
+pip install -e ".[postgres]"
+```
+
+On Arch Linux, installing the `postgresql` package does not create or start a server. Set one up once, give your user a role and create the database `pm` uses by default:
+
+```bash
+sudo -u postgres initdb -D /var/lib/postgres/data
+sudo systemctl enable --now postgresql
+sudo -u postgres createuser --createdb $USER
+createdb password_manager
+```
+
+Then move your vault over with `pm db import`; see [Move the vault to PostgreSQL and back](#move-the-vault-to-postgresql-and-back).
+
 ### Shell completion
 
 `pm` supports tab-completion in bash through `argcomplete`. `pm` prints its own completion script, so set it up once with:
@@ -311,6 +347,8 @@ What completes:
 
 Labels and tags are read from `vault.json`, where they are stored in plain text. Completion never decrypts anything and never contacts the session agent or reads `users.json`, so it also works (and shows labels) when you are logged out. A damaged vault simply offers no suggestions.
 
+With `PM_STORAGE=postgres`, completion still reads `vault.json`, so it suggests labels and tags as of `pm db import`, not ones added in the database since.
+
 ## Usage
 
 The application is started with the `pm` command. `python main.py` still works and runs the same CLI.
@@ -328,6 +366,7 @@ remove
 delete
 list
 verify
+db
 completion
 ```
 
@@ -643,6 +682,47 @@ Login failed to decrypt: github
 
 Only labels are printed, never passwords or logins. The vault is not modified.
 
+### Move the vault to PostgreSQL and back
+
+Both commands need a logged-in session.
+
+#### Import
+
+```bash
+pm db import
+```
+
+Copies `users.json` and `vault.json` into an empty database, then checks the result:
+
+```text
+Imported into Postgres: 1 users, 42 entries, 7 kept versions
+Verified alice's entries: 49 of 49 decrypt identically from Postgres
+```
+
+* **Verification.** Every password and login of the logged-in user, versions included, is decrypted from both `vault.json` and the database and compared. Only the logged-in user's entries can be decrypted; other users' entries are copied token for token. A label that differs is named, followed by the advice to keep using the JSON files.
+* **Read-only on the JSON side.** The JSON files are only read, never changed, so the JSON backend keeps working whatever happens.
+* **All or nothing.** The import is one transaction: a failure leaves the database empty, ready for another try.
+* **Refusals** (nothing is written):
+  * a database that already holds a user, entry or version: an import never merges;
+  * a v1 user record: run `pm login` once to upgrade it;
+  * a `__vN` version with tags, since versions have no tags in the database: remove them with `pm remove` as the message says;
+  * an unreadable `users.json` or `vault.json`.
+
+Once it reports every entry identical, set `PM_STORAGE=postgres` (for example in your shell profile) to use the database.
+
+#### Export
+
+```bash
+mkdir ~/pm-export
+pm db export ~/pm-export
+```
+
+Writes the database's vault and the users as `users.json` holds them as `users.json` and `vault.json` (`0600`) into the directory. Nothing is decrypted: the tokens and wrapped keys are copied as they are.
+
+An export never overwrites: it refuses a directory that already has `users.json` or `vault.json`, such as the live data directory. It also refuses an unreadable `users.json`.
+
+To go back to the JSON backend, unset `PM_STORAGE` and either copy the two exported files into the data directory (after moving the old ones aside) or point `USERS_FILE` and `VAULT_FILE` at them.
+
 ## Environment Variables
 
 The locations of the vault and user database can be overridden through environment variables.
@@ -677,6 +757,24 @@ USERS_FILE=/tmp/test-users.json pm register
 
 These environment variables are particularly useful for testing.
 
+### `PM_STORAGE`
+
+`postgres` keeps the vault in PostgreSQL; unset (or any other value) uses `vault.json`:
+
+```bash
+PM_STORAGE=postgres pm list
+```
+
+### `PM_DATABASE_URL`
+
+Overrides the database `pm` connects to (default `postgresql:///password_manager`). For example, a database on a socket in another directory:
+
+```bash
+PM_DATABASE_URL="postgresql:///pm_copy?host=/tmp/pm-pg" PM_STORAGE=postgres pm list
+```
+
+The URL is never printed or logged, but a password in it can be read from the environment by processes running as your user (and root); prefer peer authentication over the local socket.
+
 ## Project Structure
 
 ```text
@@ -693,6 +791,7 @@ password_manager/
 │       ├── crypto.py
 │       ├── logger.py
 │       ├── memory.py
+│       ├── postgres_storage.py
 │       ├── session.py
 │       ├── storage.py
 │       ├── user.py
@@ -715,8 +814,9 @@ password_manager/
 | `crypto.py`           | Salt generation and cryptographic key derivation   |
 | `logger.py`           | Application logging                                |
 | `memory.py`           | Process hardening, locking and zeroing the key     |
+| `postgres_storage.py` | PostgreSQL vault, schema, import, verify, export   |
 | `session.py`          | Login, logout and the agent-backed cipher          |
-| `storage.py`          | Reading, writing, and backing up persistent data   |
+| `storage.py`          | JSON files, and choosing the storage backend       |
 | `user.py`             | User registration and authentication               |
 | `validate_storage.py` | Validation of users and vault data                 |
 | `main.py`             | Alternative entry point (`pm` is the main one)     |
@@ -739,7 +839,9 @@ pytest                            # complete suite
 
 No test can touch the real operating-system keyring or the real session agent: the test setup replaces the keyring with an inactive backend and points the agent socket into a throwaway directory.
 
-The current test suite contains **401 tests**.
+The PostgreSQL tests need `initdb` and `pg_ctl` on the `PATH` (the `postgresql` package), but no running server: the test run starts its own throwaway cluster in a temporary directory, with only a local socket and no TCP port, gives each test an empty database, and removes it all at the end. A `PM_STORAGE` set in your shell is ignored during tests, and `PM_DATABASE_URL` points at a directory with no server in it, so no test can reach your real database.
+
+The current test suite contains **454 tests**.
 
 Coverage can be generated with:
 
@@ -750,8 +852,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-616 statements
-616 statements covered
+990 statements
+990 statements covered
 100% coverage
 ```
 
@@ -797,6 +899,7 @@ The security of the vault also depends on protecting the local filesystem.
 
 Users should protect:
 
+* The PostgreSQL database, when `PM_STORAGE=postgres` is used: it holds the same encrypted values as `vault.json`, and after `pm db import` the wrapped keys from `users.json`
 * The data directory (`~/.local/share/password_manager` by default), which holds:
   * `vault.json`
   * `users.json`
@@ -819,7 +922,7 @@ The project is actively being developed. Current limitations include:
 * No synchronization between devices
 * No secure remote backup mechanism
 * No graphical user interface
-* JSON is currently used as the persistent storage format
+* With the PostgreSQL backend, users stay in `users.json`, and tab-completion reads labels and tags from `vault.json`
 * Tags are stored as plaintext metadata and are not encrypted
 * Clipboard contents are not automatically cleared by the application
 * Command-line password arguments are available for scripting

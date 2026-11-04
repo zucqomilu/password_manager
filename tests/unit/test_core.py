@@ -5,6 +5,7 @@ from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
 from password_manager.core import generate_password, save_password, get_password, list_labels, remove_tags, verify_vault, delete_label
 from password_manager.session import SessionLocked
+from password_manager.storage import Storage
 
 
 @pytest.mark.unit
@@ -122,6 +123,23 @@ def test_save_password_overwrite(fernet, valid_vault):
         mock_save.assert_called_once()
 
 
+
+# The backend is passed in, so the same save_password() writes to the JSON files or to Postgres. An overwrite uses all
+# three functions; the module's own JSON functions are patched only to prove they are never reached.
+@pytest.mark.unit
+def test_save_password_writes_through_the_storage_functions_it_is_given(fernet, valid_vault):
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.save_vault") as json_save, \
+         patch("password_manager.core.backup_vault") as json_backup, \
+         patch("password_manager.core.input", return_value="y"):
+        assert save_password("alice", "github", fernet, "newpass", storage=storage) is True
+    storage.backup_vault.assert_called_once()
+    assert fernet.decrypt(storage.save_vault.call_args[0][0]["alice"]["github"]["password"].encode()) == b"newpass"
+    json_load.assert_not_called()
+    json_save.assert_not_called()
+    json_backup.assert_not_called()
+
 @pytest.mark.unit
 def test_save_password_user_declines_overwrite(fernet, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
@@ -202,6 +220,18 @@ def test_get_password_with_login(capsys, fernet, valid_vault):
         assert "Login: alice@example.com" in out
 
 
+
+# Reads go through the given backend too; the module's own load_vault is patched only to prove it is never reached
+@pytest.mark.unit
+def test_get_password_reads_through_the_storage_functions_it_is_given(capsys, fernet, valid_vault):
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.pyperclip.copy") as mock_clipboard:
+        get_password("alice", "github", fernet, storage=storage)
+    mock_clipboard.assert_called_once_with("supersecurepass1")
+    assert "Login: alice@example.com" in capsys.readouterr().out
+    json_load.assert_not_called()
+
 @pytest.mark.unit
 def test_get_password_reports_a_clipboard_failure_and_still_shows_the_password_with_show(fernet, capsys, valid_vault):
     with patch("password_manager.core.load_vault", return_value=valid_vault), \
@@ -259,6 +289,16 @@ def test_list_labels_filters_decryptable(fernet, capsys, valid_vault):
         assert "- twitter" in captured.out
         assert "- github" not in captured.out
 
+
+
+# The list comes from the given backend; the module's own load_vault is patched only to prove it is never reached
+@pytest.mark.unit
+def test_list_labels_reads_through_the_storage_functions_it_is_given(fernet, capsys, valid_vault):
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load:
+        list_labels("alice", fernet, storage=storage)
+    assert capsys.readouterr().out == "Stored labels:\n- github (with login)\n- twitter\n"
+    json_load.assert_not_called()
 
 @pytest.mark.unit
 def test_list_labels_lets_session_locked_through_instead_of_hiding_entries(valid_vault):
@@ -541,6 +581,21 @@ def test_remove_tags_removes_existing_tag(valid_vault):
     mock_save_vault.assert_called_once_with(valid_vault)
 
 
+
+# Both the read and the write go through the given backend; the module's own functions are patched only to prove
+# they are never reached
+@pytest.mark.unit
+def test_remove_tags_writes_through_the_storage_functions_it_is_given(valid_vault):
+    valid_vault["alice"]["github"]["tags"] = ["development", "work"]
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.save_vault") as json_save:
+        remove_tags("alice", "github", tags=["development"], storage=storage)
+    assert storage.save_vault.call_args[0][0]["alice"]["github"]["tags"] == ["work"]
+    storage.backup_vault.assert_not_called()
+    json_load.assert_not_called()
+    json_save.assert_not_called()
+
 @pytest.mark.unit
 def test_remove_tags_handles_vault_load_failure(capsys):
     with patch("password_manager.core.load_vault", return_value=None), \
@@ -677,6 +732,17 @@ def test_verify_vault_returns_count_of_entries_that_decrypt(fernet, valid_vault)
         assert verify_vault("alice", fernet)["ok"] == 3
 
 
+
+# After a migration, pm verify must check the backend in use, not the JSON files left behind; the module's own
+# load_vault is patched only to prove it is never reached
+@pytest.mark.unit
+def test_verify_vault_reads_through_the_storage_functions_it_is_given(fernet, valid_vault):
+    valid_vault["alice"]["gitlab"] = {"password": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()}
+    storage = Storage(load_vault=Mock(return_value=valid_vault), save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.core.load_vault") as json_load:
+        assert verify_vault("alice", fernet, storage=storage) == {"ok": 3, "bad_password": ["gitlab"], "bad_login": []}
+    json_load.assert_not_called()
+
 @pytest.mark.unit
 def test_verify_vault_reports_labels_whose_password_fails_to_decrypt(fernet, valid_vault):
     valid_vault["alice"]["gitlab"] = {"password": Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-1").decode()}
@@ -705,6 +771,25 @@ def test_delete_label_removes_label_from_users_vault(valid_vault):
         delete_label("alice", "github")
         assert mock_save.call_args.args[0]["alice"].keys() == {"twitter", "twitter__v1"}
 
+
+
+# Load, backup and save all go through the given backend, the backup still before the save; the module's own functions
+# are patched only to prove they are never reached
+@pytest.mark.unit
+def test_delete_label_writes_through_the_storage_functions_it_is_given(valid_vault):
+    calls = Mock()
+    calls.load_vault.return_value = valid_vault
+    storage = Storage(load_vault=calls.load_vault, save_vault=calls.save_vault, backup_vault=calls.backup_vault)
+    with patch("password_manager.core.load_vault") as json_load, \
+         patch("password_manager.core.save_vault") as json_save, \
+         patch("password_manager.core.backup_vault") as json_backup, \
+         patch("builtins.input", return_value="y"):
+        delete_label("alice", "github", storage=storage)
+    assert calls.mock_calls == [call.load_vault(), call.backup_vault(), call.save_vault(ANY)]
+    assert calls.save_vault.call_args.args[0]["alice"].keys() == {"twitter", "twitter__v1"}
+    json_load.assert_not_called()
+    json_save.assert_not_called()
+    json_backup.assert_not_called()
 
 @pytest.mark.unit
 def test_delete_label_does_not_remove_the_labels_versions(valid_vault):
