@@ -32,3 +32,18 @@ def test_reencrypt_vault_reencrypts_one_users_passwords_and_logins_under_a_new_k
     with pytest.raises(InvalidToken):
         old.decrypt(rotated["alice"]["github"]["password"].encode())
     assert rotated["bob"] == vault["bob"]
+
+
+# One login encrypted under some other key (a damaged or foreign entry) stops the whole re-encryption: half a rotation
+# would leave that value under a key that is about to be discarded. The vault passed in is not changed.
+@pytest.mark.unit
+def test_reencrypt_vault_raises_invalid_token_when_an_entry_does_not_decrypt_with_the_old_key():
+    old, new, other = Fernet(Fernet.generate_key()), Fernet(Fernet.generate_key()), Fernet(Fernet.generate_key())
+    vault = {"alice": {
+        "github": {"password": old.encrypt(b"pw-1").decode()},
+        "mail": {"password": old.encrypt(b"pw-2").decode(), "login": other.encrypt(b"alice@example.com").decode()},
+    }}
+    original = {"alice": {label: dict(entry) for label, entry in vault["alice"].items()}}
+    with pytest.raises(InvalidToken):
+        reencrypt_vault(vault, "alice", old, new)
+    assert vault == original
