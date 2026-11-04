@@ -162,6 +162,23 @@ def test_validate_users_rejects_v2_record_with_an_invalid_wrapped_key(caplog, ma
         assert "User 'alice' field 'wrapped_key' has invalid base64 format." in caplog.text
 
 
+# --- v2 record with an invalid pending_wrapped_key: the same 72-byte strict base64 as wrapped_key ---
+# Login would unwrap it to finish a rotation, so a damaged one is caught on load, never half-used
+@pytest.mark.unit
+@pytest.mark.parametrize("pending_wrapped_key", [
+    "not base64!",
+    base64.b64encode(bytes(71)).decode(),
+    base64.urlsafe_b64encode(b"\xfb" * 72).decode(),
+    None,
+], ids=["not base64", "71 bytes instead of 72", "urlsafe alphabet", "not a string"])
+def test_validate_users_rejects_a_v2_record_with_an_invalid_pending_wrapped_key(caplog, make_v2_user, pending_wrapped_key):
+    users = make_v2_user()
+    users["alice"]["pending_wrapped_key"] = pending_wrapped_key
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' field 'pending_wrapped_key' has invalid base64 format." in caplog.text
+
+
 # --- Multiple users, one invalid ---
 @pytest.mark.unit
 def test_validate_users_one_user_invalid(caplog, valid_users):

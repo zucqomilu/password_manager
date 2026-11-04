@@ -65,6 +65,9 @@ def validate_v2_user(username, record) -> bool:
     if not is_strict_base64(record["wrapped_key"], WRAPPED_KEY_LENGTH):
         logger.error(f"User '{username}' field 'wrapped_key' has invalid base64 format.")
         return False
+    if "pending_wrapped_key" in record and not is_strict_base64(record["pending_wrapped_key"], WRAPPED_KEY_LENGTH):
+        logger.error(f"User '{username}' field 'pending_wrapped_key' has invalid base64 format.")
+        return False
     return True
 
 def validate_users(data) -> bool:
