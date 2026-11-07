@@ -30,7 +30,10 @@ def rotate_data_key(username, master_password, storage=None):
     store = storage or get_storage()
     old_key = authenticate_user(username, master_password)
     new_key = Fernet.generate_key()
-    vault = reencrypt_vault(store.load_vault(), username, Fernet(old_key), Fernet(new_key))
+    stored = store.load_vault()
+    if stored is None:
+        raise RotationAborted("the vault could not be read; nothing was changed")
+    vault = reencrypt_vault(stored, username, Fernet(old_key), Fernet(new_key))
     users = load_users()
     if users[username].get("version") != 2:
         raise RotationAborted(f"'{username}' still has a v1 user record; run `pm login` once to upgrade it, then rotate again")

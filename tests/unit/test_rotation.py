@@ -70,3 +70,22 @@ def test_rotate_data_key_refuses_a_v1_user_record(make_user):
     store.save_vault.assert_not_called()
     store.backup_vault.assert_not_called()
     save_session.assert_not_called()
+
+
+# load_vault() returns None for a corrupt or invalid vault. There is nothing to re-encrypt, and rotating anyway would
+# put the user's key out of step with entries no one can read, so the rotation stops with the reason and writes
+# nothing. Storage, users.json and the agent are stand-ins, so nothing touches the disk.
+@pytest.mark.unit
+def test_rotate_data_key_refuses_an_unreadable_vault_and_writes_nothing(make_v2_user):
+    store = Storage(load_vault=lambda: None, save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.rotation.authenticate_user", return_value=Fernet.generate_key()), \
+         patch("password_manager.rotation.load_users", return_value=make_v2_user()), \
+         patch("password_manager.rotation.save_users") as save_users, \
+         patch("password_manager.rotation.save_session") as save_session:
+        with pytest.raises(RotationAborted, match="^the vault could not be read; nothing was changed$"):
+            rotate_data_key("alice", "alice_wonderland", storage=store)
+
+    save_users.assert_not_called()
+    store.save_vault.assert_not_called()
+    store.backup_vault.assert_not_called()
+    save_session.assert_not_called()
