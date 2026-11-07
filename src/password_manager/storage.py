@@ -95,6 +95,7 @@ def backup_vault():
     shutil.copy2(vault_path, backup_filename)
     logger.info(f"Creating backup for '{backup_filename}' (backup saved as '{backup_filename}').")
     print(f"Created backup: {backup_filename}")
+    return backup_filename
 
 # Copy users.json next to itself before it is rewritten (e.g. the v2 upgrade), as the rollback path.
 # copy2 keeps the 0600 mode; microseconds keep two backups in the same second from overwriting each other.

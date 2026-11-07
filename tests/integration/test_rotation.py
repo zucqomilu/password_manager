@@ -142,3 +142,19 @@ def test_rotate_data_key_backs_up_users_json_and_the_vault_before_writing(set_te
     backups = {name: open(os.path.join(set_test_env, name), "rb").read() for name in os.listdir(set_test_env) if "_backup_" in name}
     assert files["users.json"] in [content for name, content in backups.items() if name.startswith("users_backup_")]
     assert files["vault.json"] in [content for name, content in backups.items() if name.startswith("vault_backup_")]
+
+
+# Without its backup a rotation has no way back if something goes wrong that the checks cannot see, so a backup that
+# was not made (backup_vault() returns None, as for a vault file that is gone) stops it before the first write: both
+# files stay as they were and the agent keeps the old key
+@pytest.mark.integration
+def test_rotate_data_key_stops_and_writes_nothing_when_a_backup_could_not_be_made(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    files, agent_key = read_files(set_test_env), bytes(fake_agent["state"].key)
+    monkeypatch.setattr(storage, "backup_vault", lambda: None)
+
+    with pytest.raises(RotationAborted, match="^the vault could not be backed up; nothing was changed$"):
+        rotate_data_key("alice", "alice_wonderland")
+
+    assert read_files(set_test_env) == files
+    assert bytes(fake_agent["state"].key) == agent_key
