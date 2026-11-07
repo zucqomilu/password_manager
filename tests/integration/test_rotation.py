@@ -2,7 +2,7 @@ import builtins
 import os
 
 import pytest
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from unittest.mock import patch
 
 from password_manager import storage
@@ -64,6 +64,25 @@ def test_rotate_data_key_refuses_a_wrong_master_password_and_writes_nothing(set_
 
     with pytest.raises(ValueError, match="^Incorrect password.$"):
         rotate_data_key("alice", "alice_wonderlanD")
+
+    assert read_files(set_test_env) == files
+    assert sorted(os.listdir(set_test_env)) == names
+    assert bytes(fake_agent["state"].key) == agent_key
+
+
+# One entry alice's key cannot decrypt (here gitlab, encrypted under a stray key) means the vault cannot be moved to a
+# new key without losing it, so the rotation stops before any write: both files stay as they were, no backup is
+# written, and the agent keeps the old key, so every other password still reads as before
+@pytest.mark.integration
+def test_rotate_data_key_writes_nothing_when_an_entry_does_not_decrypt(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    vault = storage.load_vault()
+    stray = Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-3").decode()
+    storage.save_vault({**vault, "alice": {**vault["alice"], "gitlab": {**vault["alice"]["gitlab"], "password": stray}}})
+    files, names, agent_key = read_files(set_test_env), sorted(os.listdir(set_test_env)), bytes(fake_agent["state"].key)
+
+    with pytest.raises(InvalidToken):
+        rotate_data_key("alice", "alice_wonderland")
 
     assert read_files(set_test_env) == files
     assert sorted(os.listdir(set_test_env)) == names
