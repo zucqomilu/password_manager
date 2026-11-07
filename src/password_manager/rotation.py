@@ -32,6 +32,8 @@ def rotate_data_key(username, master_password, storage=None):
     new_key = Fernet.generate_key()
     vault = reencrypt_vault(store.load_vault(), username, Fernet(old_key), Fernet(new_key))
     users = load_users()
+    if users[username].get("version") != 2:
+        raise RotationAborted(f"'{username}' still has a v1 user record; run `pm login` once to upgrade it, then rotate again")
     pending = wrap_data_key(new_key, master_password, users[username]["kdf"])
     save_users({**users, username: {**users[username], "pending_wrapped_key": pending}})
     if load_users()[username].get("pending_wrapped_key") != pending:

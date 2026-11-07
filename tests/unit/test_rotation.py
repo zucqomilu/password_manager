@@ -1,7 +1,9 @@
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
+from unittest.mock import Mock, patch
 
-from password_manager.rotation import reencrypt_vault
+from password_manager.rotation import RotationAborted, reencrypt_vault, rotate_data_key
+from password_manager.storage import Storage
 
 
 # Rotation's core: every password and login of the rotating user, kept versions included, decrypts under the new key
@@ -47,3 +49,24 @@ def test_reencrypt_vault_raises_invalid_token_when_an_entry_does_not_decrypt_wit
     with pytest.raises(InvalidToken):
         reencrypt_vault(vault, "alice", old, new)
     assert vault == original
+
+
+# A v1 record has no kdf to wrap the new key with, and login upgrades it only when users.json can be backed up first, so
+# one can still be there after the password check. The rotation refuses it with the fix and writes nothing: neither
+# file, nor the agent. Storage, users.json and the agent are stand-ins, so nothing touches the disk.
+@pytest.mark.unit
+def test_rotate_data_key_refuses_a_v1_user_record(make_user):
+    key = Fernet.generate_key()
+    store = Storage(load_vault=lambda: {"alice": {"github": {"password": Fernet(key).encrypt(b"pw-1").decode()}}},
+                    save_vault=Mock(), backup_vault=Mock())
+    with patch("password_manager.rotation.authenticate_user", return_value=key), \
+         patch("password_manager.rotation.load_users", return_value=make_user()), \
+         patch("password_manager.rotation.save_users") as save_users, \
+         patch("password_manager.rotation.save_session") as save_session:
+        with pytest.raises(RotationAborted, match=r"^'alice' still has a v1 user record; run `pm login` once to upgrade it, then rotate again$"):
+            rotate_data_key("alice", "alice_wonderland", storage=store)
+
+    save_users.assert_not_called()
+    store.save_vault.assert_not_called()
+    store.backup_vault.assert_not_called()
+    save_session.assert_not_called()
