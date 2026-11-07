@@ -105,3 +105,25 @@ def test_rotate_data_key_stops_before_saving_the_vault_when_users_json_did_not_t
 
     assert read_files(set_test_env) == files
     assert bytes(fake_agent["state"].key) == agent_key
+
+
+# save_vault() also returns without writing when validation fails. Had the rotation gone on, users.json would hold only
+# the new key while the vault is still under the old one, so it reads the vault back first. Here validation refuses
+# the re-encrypted vault; the rotation stops with the reason, the vault is as it was, and the master password and the
+# agent keep the old key. The pending key stays: a failed read-back does not prove the vault was not written, so
+# dropping it is left to login, which keeps whichever key decrypts the vault.
+@pytest.mark.integration
+def test_rotate_data_key_keeps_the_old_key_when_the_vault_save_did_not_take_effect(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    users, vault, agent_key = storage.load_users(), storage.load_vault(), bytes(fake_agent["state"].key)
+    vault_file = read_files(set_test_env)["vault.json"]
+    real_validate_vault = storage.validate_vault
+    monkeypatch.setattr(storage, "validate_vault", lambda data: data == vault and real_validate_vault(data))
+
+    with pytest.raises(RotationAborted, match="^the vault did not take the new key; the old key is kept$"):
+        rotate_data_key("alice", "alice_wonderland")
+
+    assert authenticate_user("alice", "alice_wonderland") == agent_key
+    assert {**storage.load_users()["alice"], "pending_wrapped_key": None} == {**users["alice"], "pending_wrapped_key": None}
+    assert read_files(set_test_env)["vault.json"] == vault_file
+    assert bytes(fake_agent["state"].key) == agent_key

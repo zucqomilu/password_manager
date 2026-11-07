@@ -6,7 +6,7 @@ from .storage import get_storage, load_users, save_users
 from .user import authenticate_user
 
 
-# users.json refused or lost the pending key, so nothing else is written
+# A write did not take effect, so the rotation stopped before the old key could be lost
 class RotationAborted(Exception):
     pass
 
@@ -37,5 +37,7 @@ def rotate_data_key(username, master_password, storage=None):
     if load_users()[username].get("pending_wrapped_key") != pending:
         raise RotationAborted("users.json did not take the new key; nothing was changed")
     store.save_vault(vault)
+    if store.load_vault() != vault:
+        raise RotationAborted("the vault did not take the new key; the old key is kept")
     save_users({**users, username: {**users[username], "wrapped_key": pending}})
     save_session(username, new_key)
