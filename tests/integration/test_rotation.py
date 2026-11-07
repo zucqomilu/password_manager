@@ -1,4 +1,5 @@
 import builtins
+import os
 
 import pytest
 from cryptography.fernet import Fernet
@@ -48,3 +49,22 @@ def test_rotate_data_key_reencrypts_the_vault_rewraps_the_key_and_gives_the_agen
     with patch("pyperclip.copy"):
         main(["get", "github", "--show"])
     assert "Password: test-only-pass-2" in capsys.readouterr().out
+
+
+def read_files(directory):
+    return {name: open(os.path.join(directory, name), "rb").read() for name in ("users.json", "vault.json")}
+
+
+# A mistyped master password would wrap the new key under a password no one knows, so it is refused before anything
+# else: both files stay byte for byte as they were, no backup is written, and the agent keeps the old key
+@pytest.mark.integration
+def test_rotate_data_key_refuses_a_wrong_master_password_and_writes_nothing(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    files, names, agent_key = read_files(set_test_env), sorted(os.listdir(set_test_env)), bytes(fake_agent["state"].key)
+
+    with pytest.raises(ValueError, match="^Incorrect password.$"):
+        rotate_data_key("alice", "alice_wonderlanD")
+
+    assert read_files(set_test_env) == files
+    assert sorted(os.listdir(set_test_env)) == names
+    assert bytes(fake_agent["state"].key) == agent_key
