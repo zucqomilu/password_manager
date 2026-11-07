@@ -2,7 +2,7 @@ from cryptography.fernet import Fernet
 
 from .crypto import wrap_data_key
 from .session import save_session
-from .storage import get_storage, load_users, save_users
+from .storage import backup_users, get_storage, load_users, save_users
 from .user import authenticate_user
 
 
@@ -37,6 +37,8 @@ def rotate_data_key(username, master_password, storage=None):
     users = load_users()
     if users[username].get("version") != 2:
         raise RotationAborted(f"'{username}' still has a v1 user record; run `pm login` once to upgrade it, then rotate again")
+    backup_users()
+    store.backup_vault()
     pending = wrap_data_key(new_key, master_password, users[username]["kdf"])
     save_users({**users, username: {**users[username], "pending_wrapped_key": pending}})
     if load_users()[username].get("pending_wrapped_key") != pending:

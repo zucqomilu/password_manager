@@ -127,3 +127,18 @@ def test_rotate_data_key_keeps_the_old_key_when_the_vault_save_did_not_take_effe
     assert {**storage.load_users()["alice"], "pending_wrapped_key": None} == {**users["alice"], "pending_wrapped_key": None}
     assert read_files(set_test_env)["vault.json"] == vault_file
     assert bytes(fake_agent["state"].key) == agent_key
+
+
+# The way back if a rotation goes wrong in a way the checks cannot see: before the first write, users.json and the vault
+# are copied next to themselves, so restoring both copies gives back the old key and the entries it decrypts. The
+# copies hold what the files held before the rotation, byte for byte.
+@pytest.mark.integration
+def test_rotate_data_key_backs_up_users_json_and_the_vault_before_writing(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    files = read_files(set_test_env)
+
+    rotate_data_key("alice", "alice_wonderland")
+
+    backups = {name: open(os.path.join(set_test_env, name), "rb").read() for name in os.listdir(set_test_env) if "_backup_" in name}
+    assert files["users.json"] in [content for name, content in backups.items() if name.startswith("users_backup_")]
+    assert files["vault.json"] in [content for name, content in backups.items() if name.startswith("vault_backup_")]
