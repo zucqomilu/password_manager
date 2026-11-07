@@ -6,6 +6,11 @@ from .storage import get_storage, load_users, save_users
 from .user import authenticate_user
 
 
+# users.json refused or lost the pending key, so nothing else is written
+class RotationAborted(Exception):
+    pass
+
+
 # Every password and login of username, decrypted with old and encrypted with new; tags and other users unchanged.
 # Pure: the caller decides whether to save, so a failure here leaves nothing written.
 def reencrypt_vault(vault, username, old, new):
@@ -29,6 +34,8 @@ def rotate_data_key(username, master_password, storage=None):
     users = load_users()
     pending = wrap_data_key(new_key, master_password, users[username]["kdf"])
     save_users({**users, username: {**users[username], "pending_wrapped_key": pending}})
+    if load_users()[username].get("pending_wrapped_key") != pending:
+        raise RotationAborted("users.json did not take the new key; nothing was changed")
     store.save_vault(vault)
     save_users({**users, username: {**users[username], "wrapped_key": pending}})
     save_session(username, new_key)

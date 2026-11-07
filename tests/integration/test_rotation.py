@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from password_manager import storage
 from password_manager.cli import main
-from password_manager.rotation import rotate_data_key
+from password_manager.rotation import RotationAborted, rotate_data_key
 from password_manager.user import authenticate_user
 
 
@@ -86,4 +86,22 @@ def test_rotate_data_key_writes_nothing_when_an_entry_does_not_decrypt(set_test_
 
     assert read_files(set_test_env) == files
     assert sorted(os.listdir(set_test_env)) == names
+    assert bytes(fake_agent["state"].key) == agent_key
+
+
+# save_users() returns without writing when a record fails validation, so the rotation reads users.json back before it
+# touches the vault: had it gone on, the vault would be under a key that is wrapped nowhere. Here validation refuses
+# every change to alice's record; the rotation stops with the reason, both files stay as they were, and the agent
+# keeps the old key.
+@pytest.mark.integration
+def test_rotate_data_key_stops_before_saving_the_vault_when_users_json_did_not_take_the_pending_key(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    files, agent_key, alice = read_files(set_test_env), bytes(fake_agent["state"].key), storage.load_users()["alice"]
+    real_validate_users = storage.validate_users
+    monkeypatch.setattr(storage, "validate_users", lambda users: users["alice"] == alice and real_validate_users(users))
+
+    with pytest.raises(RotationAborted, match="^users.json did not take the new key; nothing was changed$"):
+        rotate_data_key("alice", "alice_wonderland")
+
+    assert read_files(set_test_env) == files
     assert bytes(fake_agent["state"].key) == agent_key
