@@ -158,3 +158,20 @@ def test_rotate_data_key_stops_and_writes_nothing_when_a_backup_could_not_be_mad
 
     assert read_files(set_test_env) == files
     assert bytes(fake_agent["state"].key) == agent_key
+
+
+# The users.json backup is the copy of the old wrapped key, the one way back to the entries if both files must be
+# restored, so a users.json backup that was not made (backup_users() returns None) stops the rotation before it backs
+# up the vault or writes anything: both files stay as they were and the agent keeps the old key
+@pytest.mark.integration
+def test_rotate_data_key_stops_and_writes_nothing_when_users_json_could_not_be_backed_up(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    files, names, agent_key = read_files(set_test_env), sorted(os.listdir(set_test_env)), bytes(fake_agent["state"].key)
+    monkeypatch.setattr("password_manager.rotation.backup_users", lambda: None)
+
+    with pytest.raises(RotationAborted, match="^users.json could not be backed up; nothing was changed$"):
+        rotate_data_key("alice", "alice_wonderland")
+
+    assert read_files(set_test_env) == files
+    assert sorted(os.listdir(set_test_env)) == names
+    assert bytes(fake_agent["state"].key) == agent_key

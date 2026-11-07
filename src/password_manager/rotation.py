@@ -37,7 +37,8 @@ def rotate_data_key(username, master_password, storage=None):
     users = load_users()
     if users[username].get("version") != 2:
         raise RotationAborted(f"'{username}' still has a v1 user record; run `pm login` once to upgrade it, then rotate again")
-    backup_users()
+    if backup_users() is None:
+        raise RotationAborted("users.json could not be backed up; nothing was changed")
     if store.backup_vault() is None:
         raise RotationAborted("the vault could not be backed up; nothing was changed")
     pending = wrap_data_key(new_key, master_password, users[username]["kdf"])
