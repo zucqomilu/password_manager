@@ -91,6 +91,23 @@ def test_authenticate_user_drops_the_pending_key_when_the_vault_still_decrypts_w
 
     mock_save.assert_called_once_with({"alice": record})
 
+# A vault that decrypts with neither key (here one entry under a stray key, as after a damaged or mixed-up restore)
+# proves neither key unused, so login returns the old key, as it would without a rotation, and saves nothing: both
+# keys stay in users.json until the vault is whole again. Stand-ins only, so nothing touches the disk.
+@pytest.mark.unit
+def test_authenticate_user_keeps_both_keys_when_the_vault_decrypts_with_neither(make_v2_user):
+    old_key, new_key = Fernet.generate_key(), Fernet.generate_key()
+    record = make_v2_user(data_key=old_key)["alice"]
+    pending = wrap_data_key(new_key, "alice_wonderland", record["kdf"])
+    vault = {"alice": {"github": {"password": Fernet(old_key).encrypt(b"pw-1").decode()},
+                       "gitlab": {"password": Fernet(Fernet.generate_key()).encrypt(b"pw-2").decode()}}}
+    with patch("password_manager.user.load_users", return_value={"alice": {**record, "pending_wrapped_key": pending}}), \
+         patch("password_manager.user.get_storage", return_value=Storage(load_vault=lambda: vault, save_vault=Mock(), backup_vault=Mock())), \
+         patch("password_manager.user.save_users") as mock_save:
+        assert authenticate_user("alice", "alice_wonderland") == old_key
+
+    mock_save.assert_not_called()
+
 @pytest.mark.unit
 def test_authenticate_user_incorrect_password(valid_user):
     with patch("password_manager.user.load_users", return_value=valid_user):
