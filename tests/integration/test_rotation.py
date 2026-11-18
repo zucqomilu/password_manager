@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from password_manager import storage
 from password_manager.cli import main
+from password_manager.crypto import wrap_data_key
 from password_manager.rotation import RotationAborted, rotate_data_key
 from password_manager.user import authenticate_user
 
@@ -175,3 +176,22 @@ def test_rotate_data_key_stops_and_writes_nothing_when_users_json_could_not_be_b
     assert read_files(set_test_env) == files
     assert sorted(os.listdir(set_test_env)) == names
     assert bytes(fake_agent["state"].key) == agent_key
+
+
+# Login never drops a pending key, so one can be left over from a rotation that was interrupted earlier. A rotation
+# that completes ends with the new key as the only one: the leftover is gone from alice's record, so no later login
+# needs to read the vault, and every entry decrypts with the key her master password unwraps.
+@pytest.mark.integration
+def test_rotate_data_key_replaces_a_leftover_pending_key(set_test_env, fake_agent, monkeypatch):
+    build_vault(monkeypatch)
+    users = storage.load_users()
+    leftover = wrap_data_key(Fernet.generate_key(), "alice_wonderland", users["alice"]["kdf"])
+    storage.save_users({**users, "alice": {**users["alice"], "pending_wrapped_key": leftover}})
+
+    rotate_data_key("alice", "alice_wonderland")
+
+    assert "pending_wrapped_key" not in storage.load_users()["alice"]
+    new_key = authenticate_user("alice", "alice_wonderland")
+    assert {label: Fernet(new_key).decrypt(entry["password"].encode()) for label, entry in storage.load_vault()["alice"].items()} == {
+        "github": b"test-only-pass-2", "github__v1": b"test-only-pass-1", "gitlab": b"test-only-pass-3",
+    }

@@ -48,5 +48,6 @@ def rotate_data_key(username, master_password, storage=None):
     store.save_vault(vault)
     if store.load_vault() != vault:
         raise RotationAborted("the vault did not take the new key; the old key is kept")
-    save_users({**users, username: {**users[username], "wrapped_key": pending}})
+    save_users({**users, username: {**{field: value for field, value in users[username].items() if field != "pending_wrapped_key"},
+                                    "wrapped_key": pending}})
     save_session(username, new_key)
