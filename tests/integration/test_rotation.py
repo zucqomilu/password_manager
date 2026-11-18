@@ -195,3 +195,26 @@ def test_rotate_data_key_replaces_a_leftover_pending_key(set_test_env, fake_agen
     assert {label: Fernet(new_key).decrypt(entry["password"].encode()) for label, entry in storage.load_vault()["alice"].items()} == {
         "github": b"test-only-pass-2", "github__v1": b"test-only-pass-1", "gitlab": b"test-only-pass-3",
     }
+
+
+# With a key pending, login reads the vault, which under PM_STORAGE=postgres is the database. With no server
+# (conftest's PM_DATABASE_URL points where nothing listens) it says the rotation needs Postgres to finish, without
+# the usual advice to switch to vault.json, which may be under the other key. users.json and the agent are unchanged.
+@pytest.mark.integration
+def test_main_login_says_the_rotation_needs_postgres_when_the_database_is_unreachable_during_a_pending_rotation(set_test_env, fake_agent, monkeypatch, capsys):
+    build_vault(monkeypatch)
+    users = storage.load_users()
+    pending = wrap_data_key(Fernet.generate_key(), "alice_wonderland", users["alice"]["kdf"])
+    storage.save_users({**users, "alice": {**users["alice"], "pending_wrapped_key": pending}})
+    files, agent_key = read_files(set_test_env), bytes(fake_agent["state"].key)
+    monkeypatch.setenv("PM_STORAGE", "postgres")
+    capsys.readouterr()
+
+    main(["login", "--username", "alice", "--password", "alice_wonderland"])
+
+    assert capsys.readouterr().out == (
+        "Login failed: could not reach the Postgres database; a key rotation is unfinished and needs it to finish.\n"
+        "Nothing was changed; start the database and log in again.\n"
+    )
+    assert read_files(set_test_env) == files
+    assert bytes(fake_agent["state"].key) == agent_key

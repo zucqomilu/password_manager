@@ -192,6 +192,11 @@ def main(argv=None):
         except ValueError as e:
             print(f"Login failed: {e}")
             return
+        except DatabaseUnreachable:
+            logger.error("Could not reach the Postgres database to finish a pending key rotation.")
+            print("Login failed: could not reach the Postgres database; a key rotation is unfinished and needs it to finish.\n"
+                  "Nothing was changed; start the database and log in again.")
+            return
 
     # === LOGOUT USER ===
     if args.command == "logout":
