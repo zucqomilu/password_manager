@@ -108,6 +108,21 @@ def test_authenticate_user_keeps_both_keys_when_the_vault_decrypts_with_neither(
 
     mock_save.assert_not_called()
 
+# With a key pending, login can only tell which key the vault is under by reading it. A vault that cannot be read
+# (load_vault() returns None for a corrupt or invalid one) gives no answer, so login refuses with what to do rather
+# than guess, and saves nothing: both keys stay until the vault is readable again. Stand-ins only, no disk.
+@pytest.mark.unit
+def test_authenticate_user_refuses_to_log_in_while_the_vault_cannot_be_read_to_resolve_a_pending_key(make_v2_user):
+    record = make_v2_user()["alice"]
+    pending = wrap_data_key(Fernet.generate_key(), "alice_wonderland", record["kdf"])
+    with patch("password_manager.user.load_users", return_value={"alice": {**record, "pending_wrapped_key": pending}}), \
+         patch("password_manager.user.get_storage", return_value=Storage(load_vault=lambda: None, save_vault=Mock(), backup_vault=Mock())), \
+         patch("password_manager.user.save_users") as mock_save, \
+         pytest.raises(ValueError, match=r"^A key rotation is unfinished and the vault cannot be read; restore the vault from a vault_backup_\*\.json file, then log in again\.$"):
+        authenticate_user("alice", "alice_wonderland")
+
+    mock_save.assert_not_called()
+
 @pytest.mark.unit
 def test_authenticate_user_incorrect_password(valid_user):
     with patch("password_manager.user.load_users", return_value=valid_user):

@@ -76,7 +76,12 @@ def authenticate_user(username: str, password: str) -> bytes:
 # decrypts with neither (a damaged entry) keeps both, so nothing that could still unlock an entry is thrown away.
 def resolve_pending_key(username, users, password, data_key):
     pending_key = unwrap_data_key(users[username]["pending_wrapped_key"], password, users[username]["kdf"])
-    entries = get_storage().load_vault().get(username, {})
+    vault = get_storage().load_vault()
+    if vault is None:
+        logger.error("Vault unreadable while resolving a pending data key.")
+        raise ValueError("A key rotation is unfinished and the vault cannot be read; "
+                         "restore the vault from a vault_backup_*.json file, then log in again.")
+    entries = vault.get(username, {})
     record = {field: value for field, value in users[username].items() if field != "pending_wrapped_key"}
     if decrypts_with(entries, pending_key):
         save_users({**users, username: {**record, "wrapped_key": users[username]["pending_wrapped_key"]}})
