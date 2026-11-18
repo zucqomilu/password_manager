@@ -3,7 +3,8 @@ import pytest
 from password_manager.user import register_user, authenticate_user, upgrade_user_record
 from unittest.mock import Mock, patch
 from cryptography.fernet import Fernet
-from password_manager.crypto import derive_key, unwrap_data_key
+from password_manager.crypto import derive_key, unwrap_data_key, wrap_data_key
+from password_manager.storage import Storage
 from password_manager.validate_storage import validate_users
 
 @pytest.mark.unit
@@ -57,6 +58,22 @@ def test_authenticate_user_rejects_a_wrong_password_for_a_v2_user(caplog, make_v
          pytest.raises(ValueError, match="Incorrect password."):
         authenticate_user("alice", "wrongpassword")
     assert "Incorrect password." in caplog.text
+
+# A rotation interrupted after the vault was saved under the new key leaves users.json with both keys. Login keeps the
+# one the vault decrypts with: it returns the pending key and makes it the only one, so the next login needs no vault.
+# The vault, users.json and their saves are stand-ins, so nothing touches the disk.
+@pytest.mark.unit
+def test_authenticate_user_finishes_an_interrupted_rotation_when_the_vault_decrypts_with_the_pending_key(make_v2_user):
+    old_key, new_key = Fernet.generate_key(), Fernet.generate_key()
+    record = make_v2_user(data_key=old_key)["alice"]
+    pending = wrap_data_key(new_key, "alice_wonderland", record["kdf"])
+    vault = {"alice": {"github": {"password": Fernet(new_key).encrypt(b"pw-1").decode()}}}
+    with patch("password_manager.user.load_users", return_value={"alice": {**record, "pending_wrapped_key": pending}}), \
+         patch("password_manager.user.get_storage", return_value=Storage(load_vault=lambda: vault, save_vault=Mock(), backup_vault=Mock())), \
+         patch("password_manager.user.save_users") as mock_save:
+        assert authenticate_user("alice", "alice_wonderland") == new_key
+
+    mock_save.assert_called_once_with({"alice": {**record, "wrapped_key": pending}})
 
 @pytest.mark.unit
 def test_authenticate_user_incorrect_password(valid_user):
