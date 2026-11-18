@@ -218,3 +218,45 @@ def test_main_login_says_the_rotation_needs_postgres_when_the_database_is_unreac
     )
     assert read_files(set_test_env) == files
     assert bytes(fake_agent["state"].key) == agent_key
+
+
+class Interrupted(Exception):
+    pass
+
+
+# A crash (power loss, kill) during a rotation, at either point where users.json holds both keys: before the vault is
+# saved under the new key, or after it but before users.json keeps only the new key. Logging in through pm then gives
+# a key every password and login decrypts with, kept versions included; the rotation is finished only when the vault
+# is under the new key, and otherwise the pending key stays for a later login or rotation.
+@pytest.mark.integration
+@pytest.mark.parametrize("crash_at, finished", [("vault save", False), ("final users.json save", True)])
+def test_interrupted_rotate_data_key_still_logs_in_and_reads_every_password(set_test_env, fake_agent, monkeypatch, capsys, crash_at, finished):
+    build_vault(monkeypatch)
+    real_save_users, real_save_vault = storage.save_users, storage.save_vault
+    saves = []
+
+    def save_users(users):
+        saves.append(users)
+        if crash_at == "final users.json save" and len(saves) == 2:
+            raise Interrupted()
+        real_save_users(users)
+
+    def save_vault(vault):
+        if crash_at == "vault save":
+            raise Interrupted()
+        real_save_vault(vault)
+
+    with patch("password_manager.rotation.save_users", save_users), patch.object(storage, "save_vault", save_vault), \
+         pytest.raises(Interrupted):
+        rotate_data_key("alice", "alice_wonderland")
+
+    main(["login", "--username", "alice", "--password", "alice_wonderland"])
+    capsys.readouterr()
+    with patch("pyperclip.copy"):
+        for label in ("github", "github__v1", "gitlab"):
+            main(["get", label, "--show"])
+    output = capsys.readouterr().out
+
+    assert all(f"Password: {password}" in output for password in ("test-only-pass-2", "test-only-pass-1", "test-only-pass-3"))
+    assert "alice@example.com" in output
+    assert ("pending_wrapped_key" not in storage.load_users()["alice"]) == finished
