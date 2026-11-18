@@ -71,9 +71,9 @@ def authenticate_user(username: str, password: str) -> bytes:
     logger.info(f"User '{username}' authenticated successfully.")
     return derive_key(password + ":fernet", base64.b64decode(user_data["enc_salt"]))
 
-# An interrupted rotate_data_key() left the new key pending beside the old one: the vault is whole under exactly one
-# of them, so login keeps the key every one of the user's entries decrypts with and drops the other. A vault that
-# decrypts with neither (a damaged entry) keeps both, so nothing that could still unlock an entry is thrown away.
+# An interrupted rotate_data_key() left the new key pending beside the old one. Login finishes the rotation only when
+# every one of the user's entries decrypts with the pending key; otherwise it logs in with the old key and keeps both,
+# since users.json is shared by both backends and the vault read here may not be the one the rotation wrote.
 def resolve_pending_key(username, users, password, data_key):
     pending_key = unwrap_data_key(users[username]["pending_wrapped_key"], password, users[username]["kdf"])
     vault = get_storage().load_vault()
@@ -81,14 +81,11 @@ def resolve_pending_key(username, users, password, data_key):
         logger.error("Vault unreadable while resolving a pending data key.")
         raise ValueError("A key rotation is unfinished and the vault cannot be read; "
                          "restore the vault from a vault_backup_*.json file, then log in again.")
-    entries = vault.get(username, {})
-    record = {field: value for field, value in users[username].items() if field != "pending_wrapped_key"}
-    if decrypts_with(entries, pending_key):
-        save_users({**users, username: {**record, "wrapped_key": users[username]["pending_wrapped_key"]}})
-        return pending_key
-    if decrypts_with(entries, data_key):
-        save_users({**users, username: record})
-    return data_key
+    if not decrypts_with(vault.get(username, {}), pending_key):
+        return data_key
+    save_users({**users, username: {**{field: value for field, value in users[username].items() if field != "pending_wrapped_key"},
+                                    "wrapped_key": users[username]["pending_wrapped_key"]}})
+    return pending_key
 
 def decrypts_with(entries, key):
     try:

@@ -75,11 +75,12 @@ def test_authenticate_user_finishes_an_interrupted_rotation_when_the_vault_decry
 
     mock_save.assert_called_once_with({"alice": {**record, "wrapped_key": pending}})
 
-# A rotation interrupted before the vault was saved under the new key leaves the pending key unused: the vault still
-# decrypts with the old key, so login returns the old key and drops the pending one, which no entry was ever saved
-# under. The vault, users.json and their saves are stand-ins, so nothing touches the disk.
+# A vault that still decrypts with the old key does not prove the pending key unused: users.json is shared by both
+# backends, so this may be a vault.json frozen at pm db import while the Postgres vault is already under the pending
+# key. Login returns the old key and saves nothing; the pending key stays until a login finishes the rotation or the
+# next rotation replaces it. The vault, users.json and their saves are stand-ins, so nothing touches the disk.
 @pytest.mark.unit
-def test_authenticate_user_drops_the_pending_key_when_the_vault_still_decrypts_with_the_old_key(make_v2_user):
+def test_authenticate_user_keeps_the_pending_key_when_the_vault_still_decrypts_with_the_old_key(make_v2_user):
     old_key, new_key = Fernet.generate_key(), Fernet.generate_key()
     record = make_v2_user(data_key=old_key)["alice"]
     pending = wrap_data_key(new_key, "alice_wonderland", record["kdf"])
@@ -89,7 +90,7 @@ def test_authenticate_user_drops_the_pending_key_when_the_vault_still_decrypts_w
          patch("password_manager.user.save_users") as mock_save:
         assert authenticate_user("alice", "alice_wonderland") == old_key
 
-    mock_save.assert_called_once_with({"alice": record})
+    mock_save.assert_not_called()
 
 # A vault that decrypts with neither key (here one entry under a stray key, as after a damaged or mixed-up restore)
 # proves neither key unused, so login returns the old key, as it would without a rotation, and saves nothing: both
