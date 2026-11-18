@@ -7,6 +7,7 @@ from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
 from .postgres_storage import DatabaseUnreachable, export_json, import_json, verify_import
+from .rotation import rotate_data_key
 from .storage import get_storage, load_users, load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
@@ -116,6 +117,10 @@ def build_parser():
     # === VERIFY ===
     subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')
 
+    # === ROTATE KEY ===
+    rotate_parser = subparsers.add_parser('rotate-key', help='Encrypt every password under a new data key (asks for the master password)')
+    rotate_parser.add_argument('--password', help='Master password (optional for scripting)').completer = no_completions
+
     # === DB ===
     db_parser = subparsers.add_parser('db', help='Move the vault between the JSON files and Postgres')
     db_subparsers = db_parser.add_subparsers(dest='db_command', required=True)
@@ -158,6 +163,11 @@ def run_command(parser, args, username, fernet):
             print(f"Password failed to decrypt: {label}")
         for label in result["bad_login"]:
             print(f"Login failed to decrypt: {label}")
+    elif args.command == 'rotate-key':
+        # The master password is asked again even with a live session: the session holds the data key, not the
+        # password, and the password is what wraps the new key
+        rotate_data_key(username, args.password or getpass.getpass("Master password: "), storage=get_storage())
+        print("Data key rotated: every password and login is now encrypted under a new key.")
     elif args.command == 'db' and args.db_command == 'import':
         import_to_postgres(username, fernet)
     elif args.command == 'db':

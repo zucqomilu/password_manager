@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-SUBCOMMANDS = ["register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "db", "completion"]
+SUBCOMMANDS = ["register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "rotate-key", "db", "completion"]
 
 
 @pytest.mark.integration

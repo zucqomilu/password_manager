@@ -260,3 +260,34 @@ def test_interrupted_rotate_data_key_still_logs_in_and_reads_every_password(set_
     assert all(f"Password: {password}" in output for password in ("test-only-pass-2", "test-only-pass-1", "test-only-pass-3"))
     assert "alice@example.com" in output
     assert ("pending_wrapped_key" not in storage.load_users()["alice"]) == finished
+
+
+# pm get --show for each of alice's labels: True when every password and the github login read back
+def reads_every_password(capsys):
+    capsys.readouterr()
+    with patch("pyperclip.copy"):
+        for label in ("github", "github__v1", "gitlab"):
+            main(["get", label, "--show"])
+    output = capsys.readouterr().out
+    return all(f"Password: {password}" in output for password in ("test-only-pass-2", "test-only-pass-1", "test-only-pass-3")) \
+        and "alice@example.com" in output
+
+
+# pm rotate-key as it is run by hand: with alice logged in, her master password moves every entry to a new key. It
+# reports the backups and the rotation, every password and login reads back at once (the agent was given the new key),
+# and again after a fresh login, which now unwraps the new key.
+@pytest.mark.integration
+def test_main_rotate_key_keeps_every_password_readable_after_rotation(set_test_env, fake_agent, monkeypatch, capsys):
+    build_vault(monkeypatch)
+    old_key = authenticate_user("alice", "alice_wonderland")
+    capsys.readouterr()
+
+    main(["rotate-key", "--password", "alice_wonderland"])
+
+    output = capsys.readouterr().out
+    assert [line.split(": ")[0] for line in output.splitlines()] == ["Created backup", "Created backup", "Data key rotated"]
+    assert output.endswith("Data key rotated: every password and login is now encrypted under a new key.\n")
+    assert authenticate_user("alice", "alice_wonderland") != old_key
+    assert reads_every_password(capsys)
+    main(["login", "--username", "alice", "--password", "alice_wonderland"])
+    assert reads_every_password(capsys)
