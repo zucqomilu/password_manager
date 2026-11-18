@@ -166,7 +166,11 @@ def run_command(parser, args, username, fernet):
     elif args.command == 'rotate-key':
         # The master password is asked again even with a live session: the session holds the data key, not the
         # password, and the password is what wraps the new key
-        rotate_data_key(username, args.password or getpass.getpass("Master password: "), storage=get_storage())
+        try:
+            rotate_data_key(username, args.password or getpass.getpass("Master password: "), storage=get_storage())
+        except ValueError as e:
+            print(f"Rotation failed: {e} Nothing was changed.")
+            return
         print("Data key rotated: every password and login is now encrypted under a new key.")
     elif args.command == 'db' and args.db_command == 'import':
         import_to_postgres(username, fernet)

@@ -291,3 +291,20 @@ def test_main_rotate_key_keeps_every_password_readable_after_rotation(set_test_e
     assert reads_every_password(capsys)
     main(["login", "--username", "alice", "--password", "alice_wonderland"])
     assert reads_every_password(capsys)
+
+
+# A mistyped master password at the rotate-key prompt ends with the same words login uses, not a traceback: both files
+# and the directory stay as they were (no backup either), the agent keeps the old key, and pm get still works
+@pytest.mark.integration
+def test_main_rotate_key_reports_a_wrong_master_password_and_changes_nothing(set_test_env, fake_agent, monkeypatch, capsys):
+    build_vault(monkeypatch)
+    files, names, agent_key = read_files(set_test_env), sorted(os.listdir(set_test_env)), bytes(fake_agent["state"].key)
+    capsys.readouterr()
+
+    main(["rotate-key", "--password", "alice_wonderlanD"])
+
+    assert capsys.readouterr().out == "Rotation failed: Incorrect password. Nothing was changed.\n"
+    assert read_files(set_test_env) == files
+    assert sorted(os.listdir(set_test_env)) == names
+    assert bytes(fake_agent["state"].key) == agent_key
+    assert reads_every_password(capsys)
