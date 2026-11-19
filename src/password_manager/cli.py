@@ -134,6 +134,16 @@ def build_parser():
 
     return parser
 
+# How to reach the passwords without the database: the JSON files, unless vault.json (frozen at pm db import) no longer
+# decrypts with the session's key because pm rotate-key ran under Postgres since then
+def json_fallback_advice(username, fernet):
+    result = verify_vault(username, fernet)
+    return ("vault.json is under an older data key (pm rotate-key ran after pm db import), so the JSON files cannot stand in\n"
+            "for the database. Start the database and run pm db export to get JSON files under the current key."
+            if result and (result["bad_password"] or result["bad_login"]) else
+            "To use the JSON files instead, run pm with PM_STORAGE unset. vault.json holds the vault as of pm db import;\n"
+            "changes made under Postgres since then are only in the database.")
+
 # pm verify's lines for the entries that did not decrypt
 def print_decrypt_failures(result):
     for label in result["bad_password"]:
@@ -253,6 +263,5 @@ def main(argv=None):
         print("Your session has expired. Please run `login` and try again.")
     except DatabaseUnreachable:
         logger.error("Could not reach the Postgres database.")
-        print("Could not reach the Postgres database; nothing was read or changed.\n"
-              "To use the JSON files instead, run pm with PM_STORAGE unset. vault.json holds the vault as of pm db import;\n"
-              "changes made under Postgres since then are only in the database.")
+        print("Could not reach the Postgres database; nothing was read or changed.")
+        print(json_fallback_advice(username, fernet))
