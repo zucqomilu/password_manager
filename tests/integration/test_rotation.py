@@ -324,3 +324,25 @@ def test_main_rotate_key_reports_why_a_rotation_was_aborted(set_test_env, fake_a
     assert capsys.readouterr().out == "Rotation aborted: users.json could not be backed up; nothing was changed\n"
     assert read_files(set_test_env) == files
     assert bytes(fake_agent["state"].key) == agent_key
+
+
+# An entry alice's key cannot decrypt (gitlab, under a stray key) stops the rotation before any write. Instead of a
+# traceback, pm says which entry it is, in pm verify's words, so it can be fixed or deleted before rotating again;
+# both files stay as they were and the agent keeps the old key.
+@pytest.mark.integration
+def test_main_rotate_key_names_the_entry_that_does_not_decrypt_and_changes_nothing(set_test_env, fake_agent, monkeypatch, capsys):
+    build_vault(monkeypatch)
+    vault = storage.load_vault()
+    stray = Fernet(Fernet.generate_key()).encrypt(b"test-only-pass-3").decode()
+    storage.save_vault({**vault, "alice": {**vault["alice"], "gitlab": {**vault["alice"]["gitlab"], "password": stray}}})
+    files, agent_key = read_files(set_test_env), bytes(fake_agent["state"].key)
+    capsys.readouterr()
+
+    main(["rotate-key", "--password", "alice_wonderland"])
+
+    assert capsys.readouterr().out == (
+        "Rotation failed: some entries do not decrypt with your key. Nothing was changed.\n"
+        "Password failed to decrypt: gitlab\n"
+    )
+    assert read_files(set_test_env) == files
+    assert bytes(fake_agent["state"].key) == agent_key

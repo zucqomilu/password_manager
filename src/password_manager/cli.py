@@ -1,6 +1,7 @@
 import argparse
 import getpass
 import argcomplete
+from cryptography.fernet import InvalidToken
 from .logger import logger
 from .memory import harden_process
 from .user import register_user, authenticate_user
@@ -133,6 +134,13 @@ def build_parser():
 
     return parser
 
+# pm verify's lines for the entries that did not decrypt
+def print_decrypt_failures(result):
+    for label in result["bad_password"]:
+        print(f"Password failed to decrypt: {label}")
+    for label in result["bad_login"]:
+        print(f"Login failed to decrypt: {label}")
+
 def run_command(parser, args, username, fernet):
     if args.command == 'generate':
         pwd = generate_password(args.length)
@@ -159,10 +167,7 @@ def run_command(parser, args, username, fernet):
             print("Failed to load password vault. The vault may be corrupted or unreadable.")
             return
         print(f"{result['ok']} entries OK")
-        for label in result["bad_password"]:
-            print(f"Password failed to decrypt: {label}")
-        for label in result["bad_login"]:
-            print(f"Login failed to decrypt: {label}")
+        print_decrypt_failures(result)
     elif args.command == 'rotate-key':
         # The master password is asked again even with a live session: the session holds the data key, not the
         # password, and the password is what wraps the new key
@@ -173,6 +178,10 @@ def run_command(parser, args, username, fernet):
             return
         except RotationAborted as e:
             print(f"Rotation aborted: {e}")
+            return
+        except InvalidToken:
+            print("Rotation failed: some entries do not decrypt with your key. Nothing was changed.")
+            print_decrypt_failures(verify_vault(username, fernet, storage=get_storage()))
             return
         print("Data key rotated: every password and login is now encrypted under a new key.")
     elif args.command == 'db' and args.db_command == 'import':
