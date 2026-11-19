@@ -896,7 +896,7 @@ No test can touch the real operating-system keyring or the real session agent: t
 
 The PostgreSQL tests need `initdb` and `pg_ctl` on the `PATH` (the `postgresql` package), but no running server: the test run starts its own throwaway cluster in a temporary directory, with only a local socket and no TCP port, gives each test an empty database, and removes it all at the end. A `PM_STORAGE` set in your shell is ignored during tests, and `PM_DATABASE_URL` points at a directory with no server in it, so no test can reach your real database.
 
-The current test suite contains **485 tests**.
+The current test suite contains **486 tests**.
 
 Coverage can be generated with:
 
@@ -907,8 +907,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-1067 statements
-1067 statements covered
+1071 statements
+1071 statements covered
 100% coverage
 ```
 
