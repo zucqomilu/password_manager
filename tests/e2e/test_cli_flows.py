@@ -522,3 +522,42 @@ def test_register_login_set_and_get_on_postgres_export_and_log_in_on_json(set_te
     assert "Password: test-only-pass-2" in out
     main(["verify"])
     assert capsys.readouterr().out == "3 entries OK\n"
+
+
+# Key rotation on the Postgres backend and the way back, as you would run it: the JSON files imported, a password
+# changed under PM_STORAGE=postgres, the key rotated there, then exported and the export used as the JSON backend's
+# files after a fresh login. The export's users.json unwraps the new key, which decrypts every entry, kept versions
+# and logins included, so nothing is left under the old key. The passwords are test placeholders.
+@pytest.mark.e2e
+def test_rotate_key_on_postgres_export_and_log_in_on_json_with_the_new_key(set_test_env, postgres_database, monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    register_and_login("alice", "alice_wonderland", capsys, main)
+    main(["set", "github", "--password", "test-only-pass-1", "--login", "alice@example.com"])
+    main(["db", "import"])
+
+    monkeypatch.setenv("PM_STORAGE", "postgres")
+    with patch("builtins.input", return_value="y"):
+        main(["set", "github", "--password", "test-only-pass-2"])
+    capsys.readouterr()
+    main(["rotate-key", "--password", "alice_wonderland"])
+    assert capsys.readouterr().out.endswith("Data key rotated: every password and login is now encrypted under a new key.\n")
+
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    main(["db", "export", str(export_dir)])
+
+    monkeypatch.delenv("PM_STORAGE")
+    monkeypatch.setenv("USERS_FILE", str(export_dir / "users.json"))
+    monkeypatch.setenv("VAULT_FILE", str(export_dir / "vault.json"))
+    main(["logout"])
+    main(["login", "--username", "alice", "--password", "alice_wonderland"])
+    capsys.readouterr()
+    with patch("pyperclip.copy"):
+        main(["get", "github", "--show"])
+        main(["get", "github__v1", "--show"])
+    out = capsys.readouterr().out
+    assert "Password: test-only-pass-2" in out
+    assert "Password: test-only-pass-1" in out
+    assert "alice@example.com" in out
+    main(["verify"])
+    assert capsys.readouterr().out == "2 entries OK\n"
