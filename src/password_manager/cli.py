@@ -7,7 +7,7 @@ from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
 from .postgres_storage import DatabaseUnreachable, export_json, import_json, verify_import
-from .rotation import rotate_data_key
+from .rotation import RotationAborted, rotate_data_key
 from .storage import get_storage, load_users, load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
@@ -170,6 +170,9 @@ def run_command(parser, args, username, fernet):
             rotate_data_key(username, args.password or getpass.getpass("Master password: "), storage=get_storage())
         except ValueError as e:
             print(f"Rotation failed: {e} Nothing was changed.")
+            return
+        except RotationAborted as e:
+            print(f"Rotation aborted: {e}")
             return
         print("Data key rotated: every password and login is now encrypted under a new key.")
     elif args.command == 'db' and args.db_command == 'import':

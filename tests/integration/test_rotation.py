@@ -308,3 +308,19 @@ def test_main_rotate_key_reports_a_wrong_master_password_and_changes_nothing(set
     assert sorted(os.listdir(set_test_env)) == names
     assert bytes(fake_agent["state"].key) == agent_key
     assert reads_every_password(capsys)
+
+
+# rotate_data_key()'s refusals are messages, not tracebacks: the reason it stopped is printed as it is, since each one
+# already says what happened to the keys. Here users.json could not be backed up, so nothing was written at all.
+@pytest.mark.integration
+def test_main_rotate_key_reports_why_a_rotation_was_aborted(set_test_env, fake_agent, monkeypatch, capsys):
+    build_vault(monkeypatch)
+    files, agent_key = read_files(set_test_env), bytes(fake_agent["state"].key)
+    monkeypatch.setattr("password_manager.rotation.backup_users", lambda: None)
+    capsys.readouterr()
+
+    main(["rotate-key", "--password", "alice_wonderland"])
+
+    assert capsys.readouterr().out == "Rotation aborted: users.json could not be backed up; nothing was changed\n"
+    assert read_files(set_test_env) == files
+    assert bytes(fake_agent["state"].key) == agent_key
