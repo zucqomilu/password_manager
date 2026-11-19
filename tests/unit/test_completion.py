@@ -40,7 +40,7 @@ def complete(line):
 @pytest.mark.unit
 def test_completing_pm_lists_all_subcommands():
     assert [word for word in complete("pm ") if not word.startswith("-")] == [
-        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "db", "completion",
+        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "rotate-key", "db", "completion",
     ]
 
 
@@ -85,7 +85,7 @@ def test_label_completion_offers_nothing_when_vault_cannot_be_loaded():
 
 @pytest.mark.unit
 def test_completion_offers_options_only_after_a_dash_is_typed():
-    assert complete("pm ") == ["register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "db", "completion"]
+    assert complete("pm ") == ["register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "rotate-key", "db", "completion"]
     assert complete("pm -") == ["-h", "--help"]
 
 

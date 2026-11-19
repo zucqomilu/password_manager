@@ -154,3 +154,28 @@ def test_main_prints_fallback_instructions_when_postgres_is_unreachable(set_test
         "changes made under Postgres since then are only in the database.\n"
     )
     assert {name: open(os.path.join(set_test_env, name), "rb").read() for name in files} == files
+
+
+# After pm rotate-key under Postgres, vault.json (frozen at pm db import) is under the old key while users.json and the
+# session hold the new one, so "use the JSON files" would only give decryption errors. When the database is then
+# unreachable, the fallback checks vault.json with the session key (labels only, nothing is printed decrypted) and,
+# finding it under an older key, points to pm db export instead. The JSON files are not touched.
+@pytest.mark.integration
+def test_main_fallback_message_points_to_pm_db_export_when_vault_json_is_under_an_older_key(set_test_env, postgres_database, monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("PM_DATABASE_URL", postgres_database)
+    build_json_files(monkeypatch)
+    main(["db", "import"])
+    monkeypatch.setenv("PM_STORAGE", "postgres")
+    main(["rotate-key", "--password", "alice_wonderland"])
+    monkeypatch.setenv("PM_DATABASE_URL", f"postgresql:///password_manager?host={tmp_path}")
+    files = {name: open(os.path.join(set_test_env, name), "rb").read() for name in ("users.json", "vault.json")}
+    capsys.readouterr()
+
+    main(["list"])
+
+    assert capsys.readouterr().out == (
+        "Could not reach the Postgres database; nothing was read or changed.\n"
+        "vault.json is under an older data key (pm rotate-key ran after pm db import), so the JSON files cannot stand in\n"
+        "for the database. Start the database and run pm db export to get JSON files under the current key.\n"
+    )
+    assert {name: open(os.path.join(set_test_env, name), "rb").read() for name in files} == files

@@ -1,12 +1,14 @@
 import argparse
 import getpass
 import argcomplete
+from cryptography.fernet import InvalidToken
 from .logger import logger
 from .memory import harden_process
 from .user import register_user, authenticate_user
 from .core import save_password, get_password, list_labels, generate_password, remove_tags, verify_vault, delete_label, is_versioned_backup
 from .session import SessionLocked, load_session, save_session, clear_session
 from .postgres_storage import DatabaseUnreachable, export_json, import_json, verify_import
+from .rotation import RotationAborted, rotate_data_key
 from .storage import get_storage, load_users, load_vault
 
 # Tab-completion for label arguments: label names are plain text in vault.json,
@@ -116,6 +118,10 @@ def build_parser():
     # === VERIFY ===
     subparsers.add_parser('verify', help='Check that every entry in the vault decrypts')
 
+    # === ROTATE KEY ===
+    rotate_parser = subparsers.add_parser('rotate-key', help='Encrypt every password under a new data key (asks for the master password)')
+    rotate_parser.add_argument('--password', help='Master password (optional for scripting)').completer = no_completions
+
     # === DB ===
     db_parser = subparsers.add_parser('db', help='Move the vault between the JSON files and Postgres')
     db_subparsers = db_parser.add_subparsers(dest='db_command', required=True)
@@ -127,6 +133,23 @@ def build_parser():
     subparsers.add_parser('completion', help='Print the bash completion script')
 
     return parser
+
+# How to reach the passwords without the database: the JSON files, unless vault.json (frozen at pm db import) no longer
+# decrypts with the session's key because pm rotate-key ran under Postgres since then
+def json_fallback_advice(username, fernet):
+    result = verify_vault(username, fernet)
+    return ("vault.json is under an older data key (pm rotate-key ran after pm db import), so the JSON files cannot stand in\n"
+            "for the database. Start the database and run pm db export to get JSON files under the current key."
+            if result and (result["bad_password"] or result["bad_login"]) else
+            "To use the JSON files instead, run pm with PM_STORAGE unset. vault.json holds the vault as of pm db import;\n"
+            "changes made under Postgres since then are only in the database.")
+
+# pm verify's lines for the entries that did not decrypt
+def print_decrypt_failures(result):
+    for label in result["bad_password"]:
+        print(f"Password failed to decrypt: {label}")
+    for label in result["bad_login"]:
+        print(f"Login failed to decrypt: {label}")
 
 def run_command(parser, args, username, fernet):
     if args.command == 'generate':
@@ -154,10 +177,23 @@ def run_command(parser, args, username, fernet):
             print("Failed to load password vault. The vault may be corrupted or unreadable.")
             return
         print(f"{result['ok']} entries OK")
-        for label in result["bad_password"]:
-            print(f"Password failed to decrypt: {label}")
-        for label in result["bad_login"]:
-            print(f"Login failed to decrypt: {label}")
+        print_decrypt_failures(result)
+    elif args.command == 'rotate-key':
+        # The master password is asked again even with a live session: the session holds the data key, not the
+        # password, and the password is what wraps the new key
+        try:
+            rotate_data_key(username, args.password or getpass.getpass("Master password: "), storage=get_storage())
+        except ValueError as e:
+            print(f"Rotation failed: {e} Nothing was changed.")
+            return
+        except RotationAborted as e:
+            print(f"Rotation aborted: {e}")
+            return
+        except InvalidToken:
+            print("Rotation failed: some entries do not decrypt with your key. Nothing was changed.")
+            print_decrypt_failures(verify_vault(username, fernet, storage=get_storage()))
+            return
+        print("Data key rotated: every password and login is now encrypted under a new key.")
     elif args.command == 'db' and args.db_command == 'import':
         import_to_postgres(username, fernet)
     elif args.command == 'db':
@@ -192,6 +228,11 @@ def main(argv=None):
         except ValueError as e:
             print(f"Login failed: {e}")
             return
+        except DatabaseUnreachable:
+            logger.error("Could not reach the Postgres database to finish a pending key rotation.")
+            print("Login failed: could not reach the Postgres database; a key rotation is unfinished and needs it to finish.\n"
+                  "Nothing was changed; start the database and log in again.")
+            return
 
     # === LOGOUT USER ===
     if args.command == "logout":
@@ -222,6 +263,5 @@ def main(argv=None):
         print("Your session has expired. Please run `login` and try again.")
     except DatabaseUnreachable:
         logger.error("Could not reach the Postgres database.")
-        print("Could not reach the Postgres database; nothing was read or changed.\n"
-              "To use the JSON files instead, run pm with PM_STORAGE unset. vault.json holds the vault as of pm db import;\n"
-              "changes made under Postgres since then are only in the database.")
+        print("Could not reach the Postgres database; nothing was read or changed.")
+        print(json_fallback_advice(username, fernet))

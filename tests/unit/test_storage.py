@@ -1,5 +1,6 @@
 import pytest
 import json, base64, logging
+from datetime import datetime
 from unittest.mock import patch, mock_open
 from password_manager import postgres_storage
 from password_manager.storage import Storage, get_storage, load_vault, save_vault, load_users, save_users, backup_vault
@@ -239,6 +240,21 @@ def test_backup_vault_file_missing(caplog):
         data = backup_vault()
         assert data == None
         assert "Aborting backup: vault not found." in caplog.text
+
+# Every backup is a way back, so a second one must never replace the first. A password overwrite and a key rotation
+# can both back up the vault within one second; the names differ because they carry microseconds, as the users.json
+# and Postgres backups already do. The clock and the copy are stand-ins, so nothing touches the disk.
+@pytest.mark.unit
+def test_backup_vault_keeps_two_backups_made_in_the_same_second():
+    with patch("password_manager.constants.get_vault", return_value="/fake/dir/vault.json"), \
+         patch("os.path.exists", return_value=True), \
+         patch("shutil.copy2") as mock_copy, \
+         patch("password_manager.storage.datetime") as mock_datetime:
+        mock_datetime.now.side_effect = [datetime(2026, 11, 7, 12, 0, 0, 1), datetime(2026, 11, 7, 12, 0, 0, 2)]
+        paths = [backup_vault(), backup_vault()]
+
+    assert paths == ["/fake/dir/vault_backup_20261107_120000_000001.json", "/fake/dir/vault_backup_20261107_120000_000002.json"]
+    assert [call.args[1] for call in mock_copy.call_args_list] == paths
 
 
 # === get_storage ===

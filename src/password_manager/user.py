@@ -1,9 +1,9 @@
 import base64
 import hmac
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from .crypto import derive_key, generate_salt, unwrap_data_key, wrap_data_key
 from .constants import ARGON2_PARAMS
-from .storage import save_users, load_users, backup_users
+from .storage import save_users, load_users, backup_users, get_storage
 from .logger import logger
 
 # A v2 record: fresh random salt plus the current Argon2id costs, with data_key wrapped under the master password
@@ -50,7 +50,7 @@ def authenticate_user(username: str, password: str) -> bytes:
             logger.error("Incorrect password.")
             raise
         logger.info(f"User '{username}' authenticated successfully.")
-        return data_key
+        return resolve_pending_key(username, users, password, data_key) if "pending_wrapped_key" in user_data else data_key
 
     # v1: upgrade_user_record() checks the PBKDF2 password (constant-time) and wraps the same Fernet key in a v2 record,
     # so the vault is untouched. users.json is backed up first; a failed save leaves the v1 record on disk and is retried on the next login.
@@ -70,6 +70,29 @@ def authenticate_user(username: str, password: str) -> bytes:
         logger.error("Could not save the v2 upgrade; staying on v1 for now.")
     logger.info(f"User '{username}' authenticated successfully.")
     return derive_key(password + ":fernet", base64.b64decode(user_data["enc_salt"]))
+
+# An interrupted rotate_data_key() left the new key pending beside the old one. Login finishes the rotation only when
+# every one of the user's entries decrypts with the pending key; otherwise it logs in with the old key and keeps both,
+# since users.json is shared by both backends and the vault read here may not be the one the rotation wrote.
+def resolve_pending_key(username, users, password, data_key):
+    pending_key = unwrap_data_key(users[username]["pending_wrapped_key"], password, users[username]["kdf"])
+    vault = get_storage().load_vault()
+    if vault is None:
+        logger.error("Vault unreadable while resolving a pending data key.")
+        raise ValueError("A key rotation is unfinished and the vault cannot be read; "
+                         "restore the vault from a vault_backup_*.json file, then log in again.")
+    if not decrypts_with(vault.get(username, {}), pending_key):
+        return data_key
+    save_users({**users, username: {**{field: value for field, value in users[username].items() if field != "pending_wrapped_key"},
+                                    "wrapped_key": users[username]["pending_wrapped_key"]}})
+    return pending_key
+
+def decrypts_with(entries, key):
+    try:
+        return all(Fernet(key).decrypt(value.encode()) is not None for entry in entries.values()
+                   for field, value in entry.items() if field in ("password", "login"))
+    except InvalidToken:
+        return False
 
 # Wrap the v1 Fernet key (the key every vault entry is already encrypted with) in a v2 record,
 # so upgrading never re-encrypts the vault. Pure: the caller decides when to save.

@@ -5,6 +5,9 @@ REQUIRED_USER_KEYS = {"auth_salt", "enc_salt", "password"}
 
 REQUIRED_V2_USER_KEYS = {"version", "kdf", "wrapped_key"}
 
+# A rotation in progress adds the new data key, wrapped under the same kdf, next to the old one
+OPTIONAL_V2_USER_KEYS = {"pending_wrapped_key"}
+
 KDF_PARAMS = {"salt", "time_cost", "memory_cost", "parallelism"}
 
 # nonce (12) + AES-GCM encrypted Fernet key (44) + GCM tag (16)
@@ -50,7 +53,7 @@ def invalid_kdf_params(kdf):
 
 # A v2 record holds Argon2id parameters and the data key wrapped under the master password
 def validate_v2_user(username, record) -> bool:
-    if set(record.keys()) != REQUIRED_V2_USER_KEYS:
+    if set(record.keys()) - OPTIONAL_V2_USER_KEYS != REQUIRED_V2_USER_KEYS:
         logger.error(f"User '{username}' v2 record must have exactly the fields: {', '.join(sorted(REQUIRED_V2_USER_KEYS))}.")
         return False
     if not isinstance(record["kdf"], dict):
@@ -61,6 +64,9 @@ def validate_v2_user(username, record) -> bool:
         return False
     if not is_strict_base64(record["wrapped_key"], WRAPPED_KEY_LENGTH):
         logger.error(f"User '{username}' field 'wrapped_key' has invalid base64 format.")
+        return False
+    if "pending_wrapped_key" in record and not is_strict_base64(record["pending_wrapped_key"], WRAPPED_KEY_LENGTH):
+        logger.error(f"User '{username}' field 'pending_wrapped_key' has invalid base64 format.")
         return False
     return True
 

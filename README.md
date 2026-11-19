@@ -19,6 +19,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * Automatic vault backups when overwriting passwords
 * Atomic saves: a crash or full disk never leaves a half-written vault or users file
 * `pm verify` checks that every stored password and login still decrypts
+* `pm rotate-key` re-encrypts the whole vault under a new data key, with backups first and safe to interrupt
 * Shell tab-completion for commands, options, labels and tags (via `argcomplete`), without decrypting anything
 * Sessions held by a per-user agent process: the data key stays in memory, never on disk or in the keyring
 * Best-effort memory hardening: no core dumps, no memory reads by other processes, the agent's key kept out of swap and zeroed when the session ends
@@ -188,13 +189,15 @@ Example:
 }
 ```
 
+During a `pm rotate-key`, the record briefly also holds `pending_wrapped_key`: the new data key, wrapped under the same master password and Argon2id parameters. See [Rotate the data key](#rotate-the-data-key).
+
 Records without `"version"` are v1 records (`auth_salt`, `enc_salt`, `password`). They are still read, and are upgraded to v2 on the next successful login.
 
 The master password itself is not stored.
 
 ### `users_backup_*.json`
 
-Before a v1 account is upgraded, `users.json` is copied next to itself (with `0600` permissions):
+Before a v1 account is upgraded, and before a `pm rotate-key` writes anything, `users.json` is copied next to itself (with `0600` permissions):
 
 ```text
 users_backup_YYYYMMDD_HHMMSS_ffffff.json
@@ -227,13 +230,15 @@ Passwords and login information are encrypted before being written to the vault.
 
 ### `vault_backup_*.json`
 
-When an existing password is overwritten, the previous encrypted password is retained under a versioned label and a backup of the vault is created.
+When an existing password is overwritten, the previous encrypted password is retained under a versioned label and a backup of the vault is created. `pm delete` and `pm rotate-key` also back up the vault first.
 
-Backups use the following naming format:
+Backups use the following naming format (`0600`):
 
 ```text
-vault_backup_YYYYMMDD_HHMMSS.json
+vault_backup_YYYYMMDD_HHMMSS_ffffff.json
 ```
+
+The microseconds keep two backups made in the same second apart. Backups made by earlier versions are named without them (`vault_backup_YYYYMMDD_HHMMSS.json`) and are still valid.
 
 Removing or adding tags does **not** create a versioned password entry or vault backup.
 
@@ -253,9 +258,11 @@ With `PM_STORAGE=postgres` (exactly that value), the vault is read from and save
 * **Whole-vault saves.** Every save rewrites the vault in one transaction, as `vault.json` is rewritten whole, so a failure leaves the previous rows. The same validation as for `vault.json` runs first.
 * **Backups stay JSON.** An overwrite or `pm delete` still writes `vault_backup_YYYYMMDD_HHMMSS_ffffff.json` (`0600`) into the data directory, holding the stored vault.
 * **Connection:** `postgresql:///password_manager` by default: the local socket, with no host and no password, so peer authentication admits your own user. `PM_DATABASE_URL` overrides it. The URL may hold a password, so it is never printed or logged.
-* **Unreachable database.** If the server cannot be reached, the command stops before reading or changing anything and explains how to fall back to the JSON files.
+* **Unreachable database.** If the server cannot be reached, the command stops before reading or changing anything and explains how to fall back to the JSON files. The one exception is a login while a key rotation is unfinished: it needs the database to finish the rotation, so it asks you to start the database and log in again instead.
 
 `vault.json` is never written while `PM_STORAGE=postgres` is set. It keeps the vault as of `pm db import`, so changes made under PostgreSQL since then are only in the database until you run `pm db export`.
+
+**After a `pm rotate-key` under PostgreSQL, `vault.json` can no longer be read with your current login.** The rotation re-encrypts the database's vault and updates `users.json`, but the frozen `vault.json` stays under the old key. Simply unsetting `PM_STORAGE` then gives `Incorrect master password or data corrupted.` for every entry. To get back to the JSON files, run `pm db export` (the export holds the new key and the vault encrypted under it), or restore the `users_backup_*.json` from before the rotation together with that old `vault.json`. The database's own `users` table also keeps the record from `pm db import`; it is not used for logging in.
 
 ## Requirements
 
@@ -314,14 +321,16 @@ Install the `postgres` extra (the `dev` extra already includes `psycopg`):
 pip install -e ".[postgres]"
 ```
 
-On Arch Linux, installing the `postgresql` package does not create or start a server. Set one up once, give your user a role and create the database `pm` uses by default:
+On Arch Linux, installing the `postgresql` package does not create or start a server. Set one up once, give your user a role and create the database `pm` uses by default, owned by that role:
 
 ```bash
-sudo -u postgres initdb -D /var/lib/postgres/data
+sudo -u postgres initdb -D /var/lib/postgres/data --auth-local=peer --auth-host=scram-sha-256
 sudo systemctl enable --now postgresql
-sudo -u postgres createuser --createdb $USER
-createdb password_manager
+sudo -u postgres createuser $USER
+sudo -u postgres createdb -O $USER password_manager
 ```
+
+`--auth-local=peer` lets a local-socket connection in only as the operating-system user it comes from, and `--auth-host=scram-sha-256` requires a password for TCP connections (`initdb`'s default is `trust`, which admits anyone on the machine as any role). Your role gets no `CREATEDB` right; it owns just this one database.
 
 Then move your vault over with `pm db import`; see [Move the vault to PostgreSQL and back](#move-the-vault-to-postgresql-and-back).
 
@@ -366,6 +375,7 @@ remove
 delete
 list
 verify
+rotate-key
 db
 completion
 ```
@@ -629,7 +639,7 @@ You are asked to confirm first:
 Delete 'github'? A backup is made first. (y/N):
 ```
 
-Only `y` deletes; anything else prints `Operation cancelled.` and leaves the vault untouched. Before deleting, a `vault_backup_YYYYMMDD_HHMMSS.json` copy of the vault is written next to it.
+Only `y` deletes; anything else prints `Operation cancelled.` and leaves the vault untouched. Before deleting, a `vault_backup_YYYYMMDD_HHMMSS_ffffff.json` copy of the vault is written next to it.
 
 The label's previous versions (`github__v1`, `github__v2`, ...) are **kept**. They are hidden from `pm list` but can still be read with `pm get github__v1`, or deleted individually with `pm delete github__v1`. Labels that merely start with the same text, such as `github-work`, are never affected.
 
@@ -681,6 +691,49 @@ Login failed to decrypt: github
 ```
 
 Only labels are printed, never passwords or logins. The vault is not modified.
+
+### Rotate the data key
+
+Re-encrypt every one of your passwords and logins, versions included, under a new random data key:
+
+```bash
+pm rotate-key
+```
+
+You need a logged-in session, and you are asked for the master password again: the session holds the data key, not the password, and the password is what wraps the new key. Your master password does not change. On success:
+
+```text
+Created backup: /home/alice/.local/share/password_manager/users_backup_20261119_101500_123456.json
+Created backup: /home/alice/.local/share/password_manager/vault_backup_20261119_101500_234567.json
+Data key rotated: every password and login is now encrypted under a new key.
+```
+
+The session continues with the new key, so there is no need to log in again. Other users' entries are not touched. It works the same with `PM_STORAGE=postgres`, where the database's vault is rotated.
+
+**How it stays safe to interrupt.** A rotation never leaves you without a key that opens your vault:
+
+1. Everything that could stop it is checked before anything is written: the master password, that every entry decrypts with your current key, that your record is v2 and that the vault can be read.
+2. `users.json` and the vault are backed up.
+3. The new key is added to your record as `pending_wrapped_key`, next to the old one, and `users.json` is read back to confirm it.
+4. The re-encrypted vault is saved and read back to confirm it.
+5. Only then does the record keep just the new key.
+
+If `pm` is stopped between steps 3 and 5, the next login reads the vault and finishes the rotation when every entry decrypts with the pending key. Otherwise it logs in with the old key and leaves the pending one alone; a later login or `pm rotate-key` deals with it. Login never deletes a key.
+
+**When it refuses** (nothing is changed, and you stay logged in with the old key):
+
+```text
+Rotation failed: Incorrect password. Nothing was changed.
+```
+
+```text
+Rotation failed: some entries do not decrypt with your key. Nothing was changed.
+Password failed to decrypt: gitlab
+```
+
+Fix or delete the named entries (`pm verify` lists them too), then rotate again. A rotation that stops on a failed backup or a save that did not take effect prints `Rotation aborted:` and the reason, which says what happened to the keys. A v1 account is asked to run `pm login` once first.
+
+**Older backups and exports keep the old key.** A `vault_backup_*.json` or `pm db export` made before the rotation can only be read with the `users_backup_*.json` from the same time, not with the current `users.json`. Keep them together, or delete them once you no longer need them.
 
 ### Move the vault to PostgreSQL and back
 
@@ -792,6 +845,7 @@ password_manager/
 │       ├── logger.py
 │       ├── memory.py
 │       ├── postgres_storage.py
+│       ├── rotation.py
 │       ├── session.py
 │       ├── storage.py
 │       ├── user.py
@@ -815,6 +869,7 @@ password_manager/
 | `logger.py`           | Application logging                                |
 | `memory.py`           | Process hardening, locking and zeroing the key     |
 | `postgres_storage.py` | PostgreSQL vault, schema, import, verify, export   |
+| `rotation.py`         | Re-encrypting the vault under a new data key       |
 | `session.py`          | Login, logout and the agent-backed cipher          |
 | `storage.py`          | JSON files, and choosing the storage backend       |
 | `user.py`             | User registration and authentication               |
@@ -841,7 +896,7 @@ No test can touch the real operating-system keyring or the real session agent: t
 
 The PostgreSQL tests need `initdb` and `pg_ctl` on the `PATH` (the `postgresql` package), but no running server: the test run starts its own throwaway cluster in a temporary directory, with only a local socket and no TCP port, gives each test an empty database, and removes it all at the end. A `PM_STORAGE` set in your shell is ignored during tests, and `PM_DATABASE_URL` points at a directory with no server in it, so no test can reach your real database.
 
-The current test suite contains **454 tests**.
+The current test suite contains **486 tests**.
 
 Coverage can be generated with:
 
@@ -852,8 +907,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-990 statements
-990 statements covered
+1071 statements
+1071 statements covered
 100% coverage
 ```
 
@@ -907,6 +962,10 @@ Users should protect:
   * `users.json` backups
 * The user's operating-system account
 
+### Old backups after a key rotation
+
+`pm rotate-key` protects the current vault, but it cannot reach copies made earlier. A `vault_backup_*.json`, `pm db export` or copied data directory from before the rotation is still encrypted under the old key, and the matching `users_backup_*.json` still unwraps it with your master password. If the reason for rotating is that the old key may have leaked, delete those older copies as well.
+
 ### Session key
 
 The Fernet encryption key is held only in the session agent's memory while a session is active. Any process running as your user can ask the agent to decrypt values during that time, the same trust model as `ssh-agent`. Such a process cannot read the agent's memory directly, though: see [Memory hardening](#memory-hardening), including its limits.
@@ -918,7 +977,7 @@ Sessions expire after 15 minutes without use.
 The project is actively being developed. Current limitations include:
 
 * No password recovery mechanism
-* No built-in master-password change workflow (key wrapping makes one possible without re-encrypting the vault)
+* No built-in master-password change workflow (key wrapping makes one possible without re-encrypting the vault; `pm rotate-key` changes the data key, not the master password)
 * No synchronization between devices
 * No secure remote backup mechanism
 * No graphical user interface

@@ -252,7 +252,7 @@ def test_delete_command_calls_delete_label_for_given_label():
 @pytest.mark.unit
 def test_build_parser_returns_parser_with_every_subcommand():
     assert re.search(r"\{(.+?)\}", cli.build_parser().format_help()).group(1).split(",") == [
-        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "db", "completion",
+        "register", "login", "logout", "generate", "set", "get", "remove", "delete", "list", "verify", "rotate-key", "db", "completion",
     ]
 
 

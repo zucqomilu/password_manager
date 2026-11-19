@@ -89,12 +89,11 @@ def backup_vault():
         logger.error("Aborting backup: vault not found.")
         return None
     
-    backup_dir = os.path.dirname(vault_path)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_filename = os.path.join(backup_dir, f"vault_backup_{timestamp}.json")
+    backup_filename = os.path.join(os.path.dirname(vault_path), f"vault_backup_{datetime.now():%Y%m%d_%H%M%S_%f}.json")
     shutil.copy2(vault_path, backup_filename)
     logger.info(f"Creating backup for '{backup_filename}' (backup saved as '{backup_filename}').")
     print(f"Created backup: {backup_filename}")
+    return backup_filename
 
 # Copy users.json next to itself before it is rewritten (e.g. the v2 upgrade), as the rollback path.
 # copy2 keeps the 0600 mode; microseconds keep two backups in the same second from overwriting each other.

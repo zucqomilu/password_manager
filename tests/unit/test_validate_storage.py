@@ -1,5 +1,7 @@
 import pytest, logging, base64
+from cryptography.fernet import Fernet
 from ..conftest import b64
+from password_manager.crypto import wrap_data_key
 from password_manager.validate_storage import validate_users, validate_vault, is_valid_base64
 
 
@@ -72,6 +74,15 @@ def test_validate_users_valid(valid_user):
 @pytest.mark.unit
 def test_validate_users_accepts_v2_records(make_v2_user):
     assert validate_users(make_v2_user()) is True
+
+
+# --- v2 record mid-rotation: the new data key wrapped next to the old one, under the same kdf ---
+# rotate_data_key() saves this before it re-encrypts the vault, and login reads it back to finish or undo the rotation
+@pytest.mark.unit
+def test_validate_users_accepts_a_v2_record_with_a_pending_wrapped_key(make_v2_user):
+    users = make_v2_user()
+    users["alice"]["pending_wrapped_key"] = wrap_data_key(Fernet.generate_key(), "alice_wonderland", users["alice"]["kdf"])
+    assert validate_users(users) is True
 
 
 # --- v1 records stay valid next to v2 records (mid-migration users.json) ---
@@ -149,6 +160,23 @@ def test_validate_users_rejects_v2_record_with_an_invalid_wrapped_key(caplog, ma
     with caplog.at_level(logging.ERROR):
         assert validate_users(users) is False
         assert "User 'alice' field 'wrapped_key' has invalid base64 format." in caplog.text
+
+
+# --- v2 record with an invalid pending_wrapped_key: the same 72-byte strict base64 as wrapped_key ---
+# Login would unwrap it to finish a rotation, so a damaged one is caught on load, never half-used
+@pytest.mark.unit
+@pytest.mark.parametrize("pending_wrapped_key", [
+    "not base64!",
+    base64.b64encode(bytes(71)).decode(),
+    base64.urlsafe_b64encode(b"\xfb" * 72).decode(),
+    None,
+], ids=["not base64", "71 bytes instead of 72", "urlsafe alphabet", "not a string"])
+def test_validate_users_rejects_a_v2_record_with_an_invalid_pending_wrapped_key(caplog, make_v2_user, pending_wrapped_key):
+    users = make_v2_user()
+    users["alice"]["pending_wrapped_key"] = pending_wrapped_key
+    with caplog.at_level(logging.ERROR):
+        assert validate_users(users) is False
+        assert "User 'alice' field 'pending_wrapped_key' has invalid base64 format." in caplog.text
 
 
 # --- Multiple users, one invalid ---
