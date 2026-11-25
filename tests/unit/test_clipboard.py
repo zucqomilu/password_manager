@@ -40,3 +40,14 @@ def test_clear_if_unchanged_leaves_clipboard_alone_and_logs_warning_when_it_cann
         clear_if_unchanged(hashlib.sha256(COPIED.encode()).hexdigest())
     mock_copy.assert_not_called()
     assert "Could not read the clipboard to clear the copied password." in caplog.text
+
+
+# A clipboard that still holds the password but cannot be written is the one case where the password stays copied:
+# the clearer says so in vault.log instead of dying silently. The log line names no password, digest or clipboard content.
+@pytest.mark.unit
+def test_clear_if_unchanged_logs_warning_when_clipboard_cannot_be_cleared(caplog):
+    with patch("password_manager.clipboard.pyperclip.paste", return_value=COPIED), \
+         patch("password_manager.clipboard.pyperclip.copy", side_effect=pyperclip.PyperclipException("no clipboard")), \
+         caplog.at_level(logging.WARNING):
+        clear_if_unchanged(hashlib.sha256(COPIED.encode()).hexdigest())
+    assert "Could not clear the copied password from the clipboard." in caplog.text
