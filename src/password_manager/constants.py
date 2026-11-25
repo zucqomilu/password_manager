@@ -47,7 +47,7 @@ SESSION_TTL = 15 * 60
 
 # Seconds a password copied by pm get stays on the clipboard
 def clipboard_timeout():
-    return 30
+    return int(os.environ.get("PM_CLIPBOARD_TIMEOUT", "30"))
 
 # Largest agent socket message in bytes; far above any password, login or Fernet token
 MAX_MESSAGE_SIZE = 64 * 1024

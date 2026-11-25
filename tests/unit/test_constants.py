@@ -109,3 +109,10 @@ def test_get_database_url_honors_pm_database_url_override(monkeypatch):
 def test_clipboard_timeout_defaults_to_30_seconds(monkeypatch):
     monkeypatch.delenv("PM_CLIPBOARD_TIMEOUT", raising=False)
     assert clipboard_timeout() == 30
+
+
+# PM_CLIPBOARD_TIMEOUT sets how many seconds a copied password stays on the clipboard
+@pytest.mark.unit
+def test_clipboard_timeout_reads_pm_clipboard_timeout(monkeypatch):
+    monkeypatch.setenv("PM_CLIPBOARD_TIMEOUT", "45")
+    assert clipboard_timeout() == 45
