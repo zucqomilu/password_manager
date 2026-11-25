@@ -116,3 +116,11 @@ def test_clipboard_timeout_defaults_to_30_seconds(monkeypatch):
 def test_clipboard_timeout_reads_pm_clipboard_timeout(monkeypatch):
     monkeypatch.setenv("PM_CLIPBOARD_TIMEOUT", "45")
     assert clipboard_timeout() == 45
+
+
+# A typo in PM_CLIPBOARD_TIMEOUT must never break pm get or leave the password on the clipboard for good
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ["abc", "", "-5", "1.5", " "])
+def test_clipboard_timeout_falls_back_to_default_for_invalid_or_negative_value(monkeypatch, value):
+    monkeypatch.setenv("PM_CLIPBOARD_TIMEOUT", value)
+    assert clipboard_timeout() == 30
