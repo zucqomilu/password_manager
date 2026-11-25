@@ -17,3 +17,12 @@ def test_clear_if_unchanged_clears_clipboard_still_holding_copied_password():
          patch("password_manager.clipboard.pyperclip.copy") as mock_copy:
         clear_if_unchanged(hashlib.sha256(COPIED.encode()).hexdigest())
     mock_copy.assert_called_once_with("")
+
+
+# Something copied after pm get (a URL, a different password) belongs to the user: the clearer never empties it
+@pytest.mark.unit
+def test_clear_if_unchanged_leaves_clipboard_alone_when_it_changed():
+    with patch("password_manager.clipboard.pyperclip.paste", return_value="copied-later-by-the-user"), \
+         patch("password_manager.clipboard.pyperclip.copy") as mock_copy:
+        clear_if_unchanged(hashlib.sha256(COPIED.encode()).hexdigest())
+    mock_copy.assert_not_called()
