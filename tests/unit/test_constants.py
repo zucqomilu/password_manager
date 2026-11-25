@@ -1,6 +1,6 @@
 import pytest
 
-from password_manager.constants import get_data_dir, get_database_url, get_log, get_socket_path, get_users, get_vault
+from password_manager.constants import clipboard_timeout, get_data_dir, get_database_url, get_log, get_socket_path, get_users, get_vault
 
 
 # Keep a PM_DATA_DIR exported in the developer's shell from leaking into these tests
@@ -102,3 +102,10 @@ def test_get_database_url_defaults_to_postgresql_password_manager(monkeypatch):
 def test_get_database_url_honors_pm_database_url_override(monkeypatch):
     monkeypatch.setenv("PM_DATABASE_URL", "postgresql://pm@db.example/vault")
     assert get_database_url() == "postgresql://pm@db.example/vault"
+
+
+# A copied password is cleared from the clipboard after half a minute unless PM_CLIPBOARD_TIMEOUT says otherwise
+@pytest.mark.unit
+def test_clipboard_timeout_defaults_to_30_seconds(monkeypatch):
+    monkeypatch.delenv("PM_CLIPBOARD_TIMEOUT", raising=False)
+    assert clipboard_timeout() == 30
