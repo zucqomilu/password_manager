@@ -124,3 +124,10 @@ def test_clipboard_timeout_reads_pm_clipboard_timeout(monkeypatch):
 def test_clipboard_timeout_falls_back_to_default_for_invalid_or_negative_value(monkeypatch, value):
     monkeypatch.setenv("PM_CLIPBOARD_TIMEOUT", value)
     assert clipboard_timeout() == 30
+
+
+# PM_CLIPBOARD_TIMEOUT=0 turns clearing off: the copied password stays on the clipboard until something replaces it
+@pytest.mark.unit
+def test_clipboard_timeout_returns_0_when_pm_clipboard_timeout_is_0(monkeypatch):
+    monkeypatch.setenv("PM_CLIPBOARD_TIMEOUT", "0")
+    assert clipboard_timeout() == 0
