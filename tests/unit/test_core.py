@@ -265,6 +265,15 @@ def test_get_password_starts_clearer_with_digest_on_stdin_never_in_argv(fernet, 
     fake_clearer.return_value.stdin.close.assert_called_once()
 
 
+# Nothing was copied, so there is nothing to clear: no process is started for a clipboard pm could not write
+@pytest.mark.unit
+def test_get_password_starts_no_clearer_when_copying_to_clipboard_failed(fernet, valid_vault, fake_clearer):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy", side_effect=pyperclip.PyperclipException("no clipboard")):
+        get_password("alice", "github", fernet)
+    fake_clearer.assert_not_called()
+
+
 @pytest.mark.unit
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \
