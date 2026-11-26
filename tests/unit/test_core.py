@@ -285,6 +285,24 @@ def test_get_password_starts_no_clearer_when_pm_clipboard_timeout_is_0(fernet, v
     fake_clearer.assert_not_called()
 
 
+# A clearer that cannot be started (no processes left, a pipe broken by a clearer that died at once) must not break
+# pm get after the copy: the user is told the password stays copied, and the login still prints. The warning names no
+# password or digest.
+@pytest.mark.unit
+def test_get_password_warns_password_stays_copied_when_clearer_cannot_be_started(fernet, valid_vault, fake_clearer, capsys, caplog):
+    fake_clearer.side_effect = OSError("cannot fork")
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy"), \
+         caplog.at_level(logging.WARNING):
+        get_password("alice", "github", fernet)
+    out = capsys.readouterr().out
+    warning = "Could not start clearing the clipboard: the password stays copied until you replace it."
+    assert warning in out
+    assert warning in caplog.text
+    assert "Login: alice@example.com" in out
+    assert "supersecurepass1" not in out + caplog.text
+
+
 @pytest.mark.unit
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \

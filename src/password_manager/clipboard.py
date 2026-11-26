@@ -30,13 +30,21 @@ def clear_if_unchanged(digest):
 # Starts the clearer for a password pm get just copied. The digest goes through a pipe, never argv
 # (/proc/<pid>/cmdline is readable by every process); the timeout is not secret. Its own session keeps it alive after
 # the terminal closes; no output, since nobody is there to read it. A timeout of 0 means never clear: no clearer.
+# A clearer that cannot be started, or dies before reading the digest (BrokenPipeError), leaves the password on the
+# clipboard: the user is told so, in a fixed text that names no password, digest or exception.
+STAYS_COPIED = "Could not start clearing the clipboard: the password stays copied until you replace it."
+
 def start_clearer(password, timeout):
     if not timeout:
         return
-    clearer = Popen([sys.executable, "-m", "password_manager.clipboard", str(timeout)], stdin=PIPE, stdout=DEVNULL,
-                    stderr=DEVNULL, text=True, start_new_session=True)
-    clearer.stdin.write(hashlib.sha256(password.encode()).hexdigest())
-    clearer.stdin.close()
+    try:
+        clearer = Popen([sys.executable, "-m", "password_manager.clipboard", str(timeout)], stdin=PIPE, stdout=DEVNULL,
+                        stderr=DEVNULL, text=True, start_new_session=True)
+        clearer.stdin.write(hashlib.sha256(password.encode()).hexdigest())
+        clearer.stdin.close()
+    except OSError:
+        logger.warning(STAYS_COPIED)
+        print(STAYS_COPIED)
 
 
 # The clearer process's main: hardened first, since the clipboard it reads may hold the password; then the digest from
