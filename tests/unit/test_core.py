@@ -303,6 +303,17 @@ def test_get_password_warns_password_stays_copied_when_clearer_cannot_be_started
     assert "supersecurepass1" not in out + caplog.text
 
 
+# Tests call pm get without patching the clipboard (tests/integration/test_data_dir.py, test_session_agent.py), which
+# used to put a test password on the developer's real clipboard. An autouse fake now stands in for pyperclip.copy and
+# pyperclip.paste in every test: an unpatched pm get lands there, and the real clipboard is never read or written.
+@pytest.mark.unit
+def test_no_test_reads_or_writes_the_real_clipboard(fernet, valid_vault, fake_clipboard):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
+        get_password("alice", "github", fernet)
+    assert fake_clipboard["content"] == "supersecurepass1"
+    assert pyperclip.paste() == "supersecurepass1"
+
+
 @pytest.mark.unit
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \

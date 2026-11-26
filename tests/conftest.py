@@ -1,5 +1,6 @@
 import pytest, base64, json, builtins, tempfile, os, shutil, subprocess, time, uuid
 import psycopg
+import pyperclip
 import keyring
 from keyring.backends.null import Keyring as NullKeyring
 from keyring.errors import PasswordDeleteError
@@ -96,6 +97,17 @@ def fake_clearer(monkeypatch):
     popen = Mock()
     monkeypatch.setattr("password_manager.clipboard.Popen", popen)
     return popen
+
+
+# No test may read or write the developer's real clipboard. This replaces pyperclip itself, not one module's name for it:
+# core.py and clipboard.py both call pyperclip.copy / paste, and a test that patches
+# password_manager.core.pyperclip.copy still sits on top of this fake. The dict remembers the last copy for one test.
+@pytest.fixture(autouse=True)
+def fake_clipboard(monkeypatch):
+    clipboard = {"content": ""}
+    monkeypatch.setattr(pyperclip, "copy", lambda text: clipboard.update(content=text))
+    monkeypatch.setattr(pyperclip, "paste", lambda: clipboard["content"])
+    return clipboard
 
 
 # Helper to generate valid base64 strings
