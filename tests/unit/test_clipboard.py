@@ -1,11 +1,12 @@
 import hashlib
+import io
 import logging
 from unittest.mock import patch
 
 import pyperclip
 import pytest
 
-from password_manager.clipboard import clear_if_unchanged
+from password_manager.clipboard import clear_if_unchanged, run_clearer
 
 # A made-up value, never a real password
 COPIED = "not-a-real-password-1"
@@ -51,3 +52,17 @@ def test_clear_if_unchanged_logs_warning_when_clipboard_cannot_be_cleared(caplog
          caplog.at_level(logging.WARNING):
         clear_if_unchanged(hashlib.sha256(COPIED.encode()).hexdigest())
     assert "Could not clear the copied password from the clipboard." in caplog.text
+
+
+# The clearer's own main: it makes itself non-dumpable before it reads anything (the clipboard it is about to read may
+# hold the password), takes the digest from stdin, sleeps the timeout and only then checks and clears the clipboard.
+# harden_process is faked: the real one would harden the pytest process itself.
+@pytest.mark.unit
+def test_run_clearer_hardens_reads_digest_from_stdin_waits_timeout_then_clears():
+    digest = hashlib.sha256(COPIED.encode()).hexdigest()
+    calls = []
+    with patch("password_manager.clipboard.harden_process", side_effect=lambda: calls.append("harden")), \
+         patch("password_manager.clipboard.sleep", side_effect=lambda seconds: calls.append(("sleep", seconds))), \
+         patch("password_manager.clipboard.clear_if_unchanged", side_effect=lambda d: calls.append(("clear", d))):
+        run_clearer(30, io.StringIO(digest + "\n"))
+    assert calls == ["harden", ("sleep", 30), ("clear", digest)]

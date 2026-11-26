@@ -2,10 +2,12 @@ import hashlib
 import hmac
 import sys
 from subprocess import DEVNULL, PIPE, Popen
+from time import sleep
 
 import pyperclip
 
 from .logger import logger
+from .memory import harden_process
 
 # Clears the password pm get copied, after the clipboard timeout. Runs in its own short-lived process, which knows only
 # a SHA-256 digest of the copied password: never the password, the data key, the vault or the session agent.
@@ -33,3 +35,12 @@ def start_clearer(password, timeout):
                     stderr=DEVNULL, text=True, start_new_session=True)
     clearer.stdin.write(hashlib.sha256(password.encode()).hexdigest())
     clearer.stdin.close()
+
+
+# The clearer process's main: hardened first, since the clipboard it reads may hold the password; then the digest from
+# the pipe, the wait, and the check. An empty pipe (pm get died before writing) gives a digest nothing matches.
+def run_clearer(timeout, stdin):
+    harden_process()
+    digest = stdin.readline().strip()
+    sleep(timeout)
+    clear_if_unchanged(digest)
