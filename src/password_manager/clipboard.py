@@ -29,8 +29,10 @@ def clear_if_unchanged(digest):
 
 # Starts the clearer for a password pm get just copied. The digest goes through a pipe, never argv
 # (/proc/<pid>/cmdline is readable by every process); the timeout is not secret. Its own session keeps it alive after
-# the terminal closes; no output, since nobody is there to read it.
+# the terminal closes; no output, since nobody is there to read it. A timeout of 0 means never clear: no clearer.
 def start_clearer(password, timeout):
+    if not timeout:
+        return
     clearer = Popen([sys.executable, "-m", "password_manager.clipboard", str(timeout)], stdin=PIPE, stdout=DEVNULL,
                     stderr=DEVNULL, text=True, start_new_session=True)
     clearer.stdin.write(hashlib.sha256(password.encode()).hexdigest())

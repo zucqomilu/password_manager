@@ -274,6 +274,17 @@ def test_get_password_starts_no_clearer_when_copying_to_clipboard_failed(fernet,
     fake_clearer.assert_not_called()
 
 
+# PM_CLIPBOARD_TIMEOUT=0 turns clearing off: the password is copied as before and no clearer process is started
+@pytest.mark.unit
+def test_get_password_starts_no_clearer_when_pm_clipboard_timeout_is_0(fernet, valid_vault, fake_clearer, monkeypatch):
+    monkeypatch.setenv("PM_CLIPBOARD_TIMEOUT", "0")
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy") as mock_copy:
+        get_password("alice", "github", fernet)
+    mock_copy.assert_called_once_with("supersecurepass1")
+    fake_clearer.assert_not_called()
+
+
 @pytest.mark.unit
 def test_get_password_logs_and_prints_on_vault_load_failure(capsys, caplog, fernet):
     with patch("password_manager.core.load_vault", return_value=None), \
