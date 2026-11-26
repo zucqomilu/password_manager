@@ -45,6 +45,15 @@ KEYRING_ACCOUNT = "session"
 
 SESSION_TTL = 15 * 60
 
+# Seconds a password copied by pm get stays on the clipboard. Anything but a whole number of seconds falls back to the
+# default instead of raising: an error here would leave the copied password on the clipboard with nothing to clear it.
+# isdecimal(), not isdigit(): "²" is a digit that int() rejects.
+CLIPBOARD_TIMEOUT = 30
+
+def clipboard_timeout():
+    value = os.environ.get("PM_CLIPBOARD_TIMEOUT", "").strip()
+    return int(value) if value.isdecimal() else CLIPBOARD_TIMEOUT
+
 # Largest agent socket message in bytes; far above any password, login or Fernet token
 MAX_MESSAGE_SIZE = 64 * 1024
 

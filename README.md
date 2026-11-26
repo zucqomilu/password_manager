@@ -11,7 +11,7 @@ The project is currently intended for **learning and personal use**, with the lo
 * Existing accounts are upgraded automatically on the next login, with a `users.json` backup made first
 * Encrypted password and login storage
 * Secure password generation using Python's `secrets` module
-* Password retrieval and clipboard integration
+* Password retrieval and clipboard integration, with the copied password cleared from the clipboard after 30 seconds (`PM_CLIPBOARD_TIMEOUT`)
 * Password/login management by label
 * Tag-based password organization, filtering, and removal
 * `pm delete` removes a label after confirmation, with a vault backup made first
@@ -613,7 +613,9 @@ Retrieve a password:
 pm get github
 ```
 
-The password is copied to the system clipboard.
+The password is copied to the system clipboard. After 30 seconds it is cleared again, but only if the clipboard still holds it: anything you copied in the meantime is left alone. `PM_CLIPBOARD_TIMEOUT` changes the delay (see [Environment Variables](#pm_clipboard_timeout)).
+
+The clearing is done by a small background process that `pm get` starts and that exits once it is done. It never receives the password: only a SHA-256 digest of it, through a pipe, which is all it needs to tell whether the clipboard has changed. If it cannot be started, `pm get` says that the password stays copied.
 
 If the entry contains a login, it is displayed as well.
 
@@ -828,6 +830,14 @@ PM_DATABASE_URL="postgresql:///pm_copy?host=/tmp/pm-pg" PM_STORAGE=postgres pm l
 
 The URL is never printed or logged, but a password in it can be read from the environment by processes running as your user (and root); prefer peer authentication over the local socket.
 
+### `PM_CLIPBOARD_TIMEOUT`
+
+Seconds a password copied by `pm get` stays on the clipboard (default `30`). `0` turns clearing off. Anything other than a whole number of seconds (a typo, a negative number, `1.5`) falls back to 30, so a mistake never leaves the password on the clipboard for good:
+
+```bash
+PM_CLIPBOARD_TIMEOUT=10 pm get github
+```
+
 ## Project Structure
 
 ```text
@@ -862,8 +872,9 @@ password_manager/
 | Module                | Responsibility                                     |
 | --------------------- | -------------------------------------------------- |
 | `cli.py`              | Command-line interface and command dispatch        |
+| `clipboard.py`        | Clearing the copied password after the timeout     |
 | `agent.py`            | Session agent: holds the key, encrypts, decrypts   |
-| `constants.py`        | File and socket paths, keyring IDs, session TTL    |
+| `constants.py`        | Paths, keyring IDs, session TTL, clipboard timeout |
 | `core.py`             | Password generation and vault operations           |
 | `crypto.py`           | Salt generation and cryptographic key derivation   |
 | `logger.py`           | Application logging                                |
@@ -892,11 +903,11 @@ pytest -m "unit or integration"   # unit and integration tests
 pytest                            # complete suite
 ```
 
-No test can touch the real operating-system keyring or the real session agent: the test setup replaces the keyring with an inactive backend and points the agent socket into a throwaway directory.
+No test can touch the real operating-system keyring, the real session agent or your clipboard: the test setup replaces the keyring with an inactive backend, points the agent socket into a throwaway directory, and replaces the clipboard with an in-memory fake. The one test that runs a real clipboard-clearing process gives it a clipboard of its own (stand-in `wl-copy` and `wl-paste` scripts working on a temporary file).
 
 The PostgreSQL tests need `initdb` and `pg_ctl` on the `PATH` (the `postgresql` package), but no running server: the test run starts its own throwaway cluster in a temporary directory, with only a local socket and no TCP port, gives each test an empty database, and removes it all at the end. A `PM_STORAGE` set in your shell is ignored during tests, and `PM_DATABASE_URL` points at a directory with no server in it, so no test can reach your real database.
 
-The current test suite contains **486 tests**.
+The current test suite contains **505 tests**.
 
 Coverage can be generated with:
 
@@ -907,8 +918,8 @@ pytest --cov --cov-report=term-missing
 The current implementation achieves:
 
 ```text
-1071 statements
-1071 statements covered
+1115 statements
+1115 statements covered
 100% coverage
 ```
 
@@ -944,9 +955,13 @@ Interactive password entry should be preferred.
 
 ### Clipboard
 
-The `get` command copies decrypted passwords to the system clipboard.
+The `get` command copies decrypted passwords to the system clipboard and clears them again after `PM_CLIPBOARD_TIMEOUT` seconds (30 by default).
 
-Clipboard contents may be accessible to other applications depending on the operating system and desktop environment.
+* Until then, clipboard contents may be accessible to other applications, depending on the operating system and desktop environment.
+* Clipboard history managers (such as Klipper, cliphist or GNOME extensions) keep their own copy, which `pm` cannot clear. If you use one, remove the password from its history or turn the history off.
+* The clearing process holds only a SHA-256 digest of the password, received through a pipe and never on its command line (which other processes can read). Like `pm` itself, it allows no core dumps and cannot be inspected by other processes.
+* It clears the clipboard only if it still holds the copied password. If the clipboard cannot be read or written at that point, it leaves it as it is and notes this in `vault.log`; the note never contains the password.
+* With `PM_CLIPBOARD_TIMEOUT=0` the password stays on the clipboard until something replaces it.
 
 ### Local files
 
@@ -983,7 +998,7 @@ The project is actively being developed. Current limitations include:
 * No graphical user interface
 * With the PostgreSQL backend, users stay in `users.json`, and tab-completion reads labels and tags from `vault.json`
 * Tags are stored as plaintext metadata and are not encrypted
-* Clipboard contents are not automatically cleared by the application
+* Clipboard history managers keep their own copy of a copied password, which `pm` cannot clear
 * Command-line password arguments are available for scripting
 * The cryptographic parameters and security architecture may require further review before production use
 

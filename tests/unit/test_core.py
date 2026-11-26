@@ -1,5 +1,8 @@
+import hashlib
 import pytest
 import logging
+import subprocess
+import sys
 import pyperclip
 from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
@@ -242,6 +245,73 @@ def test_get_password_reports_a_clipboard_failure_and_still_shows_the_password_w
     assert "Password: supersecurepass1" in out
     assert "Login: alice@example.com" in out
     assert "data corrupted" not in out
+
+
+# The clearer outlives pm get, so it must never see the password: it gets only a SHA-256 digest, and that through a pipe,
+# because any process can read another's command line in /proc and an unsalted digest of a weak password is
+# brute-forceable. Its own session keeps it alive when the terminal closes.
+@pytest.mark.unit
+def test_get_password_starts_clearer_with_digest_on_stdin_never_in_argv(fernet, valid_vault, fake_clearer, monkeypatch):
+    monkeypatch.delenv("PM_CLIPBOARD_TIMEOUT", raising=False)
+    with patch("password_manager.core.load_vault", return_value=valid_vault), patch("password_manager.core.pyperclip.copy"):
+        get_password("alice", "github", fernet)
+    digest = hashlib.sha256(b"supersecurepass1").hexdigest()
+    argv = fake_clearer.call_args.args[0]
+    assert argv == [sys.executable, "-m", "password_manager.clipboard", "30"]
+    assert not any("supersecurepass1" in arg or digest in arg for arg in argv)
+    assert fake_clearer.call_args.kwargs["stdin"] == subprocess.PIPE
+    assert fake_clearer.call_args.kwargs["start_new_session"] is True
+    fake_clearer.return_value.stdin.write.assert_called_once_with(digest)
+    fake_clearer.return_value.stdin.close.assert_called_once()
+
+
+# Nothing was copied, so there is nothing to clear: no process is started for a clipboard pm could not write
+@pytest.mark.unit
+def test_get_password_starts_no_clearer_when_copying_to_clipboard_failed(fernet, valid_vault, fake_clearer):
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy", side_effect=pyperclip.PyperclipException("no clipboard")):
+        get_password("alice", "github", fernet)
+    fake_clearer.assert_not_called()
+
+
+# PM_CLIPBOARD_TIMEOUT=0 turns clearing off: the password is copied as before and no clearer process is started
+@pytest.mark.unit
+def test_get_password_starts_no_clearer_when_pm_clipboard_timeout_is_0(fernet, valid_vault, fake_clearer, monkeypatch):
+    monkeypatch.setenv("PM_CLIPBOARD_TIMEOUT", "0")
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy") as mock_copy:
+        get_password("alice", "github", fernet)
+    mock_copy.assert_called_once_with("supersecurepass1")
+    fake_clearer.assert_not_called()
+
+
+# A clearer that cannot be started (no processes left, a pipe broken by a clearer that died at once) must not break
+# pm get after the copy: the user is told the password stays copied, and the login still prints. The warning names no
+# password or digest.
+@pytest.mark.unit
+def test_get_password_warns_password_stays_copied_when_clearer_cannot_be_started(fernet, valid_vault, fake_clearer, capsys, caplog):
+    fake_clearer.side_effect = OSError("cannot fork")
+    with patch("password_manager.core.load_vault", return_value=valid_vault), \
+         patch("password_manager.core.pyperclip.copy"), \
+         caplog.at_level(logging.WARNING):
+        get_password("alice", "github", fernet)
+    out = capsys.readouterr().out
+    warning = "Could not start clearing the clipboard: the password stays copied until you replace it."
+    assert warning in out
+    assert warning in caplog.text
+    assert "Login: alice@example.com" in out
+    assert "supersecurepass1" not in out + caplog.text
+
+
+# Tests call pm get without patching the clipboard (tests/integration/test_data_dir.py, test_session_agent.py), which
+# used to put a test password on the developer's real clipboard. An autouse fake now stands in for pyperclip.copy and
+# pyperclip.paste in every test: an unpatched pm get lands there, and the real clipboard is never read or written.
+@pytest.mark.unit
+def test_no_test_reads_or_writes_the_real_clipboard(fernet, valid_vault, fake_clipboard):
+    with patch("password_manager.core.load_vault", return_value=valid_vault):
+        get_password("alice", "github", fernet)
+    assert fake_clipboard["content"] == "supersecurepass1"
+    assert pyperclip.paste() == "supersecurepass1"
 
 
 @pytest.mark.unit

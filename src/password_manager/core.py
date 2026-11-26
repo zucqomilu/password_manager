@@ -3,6 +3,8 @@ import string
 import secrets
 import pyperclip
 from cryptography.fernet import InvalidToken
+from .clipboard import start_clearer
+from .constants import clipboard_timeout
 from .logger import logger
 from .storage import Storage, load_vault, backup_vault, save_vault
 
@@ -98,6 +100,7 @@ def save_password(username, label, fernet, password=None, login=None, tags=None,
 def copy_to_clipboard(label, password):
     try:
         pyperclip.copy(password)
+        start_clearer(password, clipboard_timeout())
         logger.info(f"Password for '{label}' has been copied to the clipboard.")
         print(f"Password for '{label}' has been copied to the clipboard.")
     except pyperclip.PyperclipException:
