@@ -1,5 +1,8 @@
+import hashlib
 import pytest
 import logging
+import subprocess
+import sys
 import pyperclip
 from unittest.mock import Mock, call, patch, ANY
 from cryptography.fernet import Fernet
@@ -242,6 +245,24 @@ def test_get_password_reports_a_clipboard_failure_and_still_shows_the_password_w
     assert "Password: supersecurepass1" in out
     assert "Login: alice@example.com" in out
     assert "data corrupted" not in out
+
+
+# The clearer outlives pm get, so it must never see the password: it gets only a SHA-256 digest, and that through a pipe,
+# because any process can read another's command line in /proc and an unsalted digest of a weak password is
+# brute-forceable. Its own session keeps it alive when the terminal closes.
+@pytest.mark.unit
+def test_get_password_starts_clearer_with_digest_on_stdin_never_in_argv(fernet, valid_vault, fake_clearer, monkeypatch):
+    monkeypatch.delenv("PM_CLIPBOARD_TIMEOUT", raising=False)
+    with patch("password_manager.core.load_vault", return_value=valid_vault), patch("password_manager.core.pyperclip.copy"):
+        get_password("alice", "github", fernet)
+    digest = hashlib.sha256(b"supersecurepass1").hexdigest()
+    argv = fake_clearer.call_args.args[0]
+    assert argv == [sys.executable, "-m", "password_manager.clipboard", "30"]
+    assert not any("supersecurepass1" in arg or digest in arg for arg in argv)
+    assert fake_clearer.call_args.kwargs["stdin"] == subprocess.PIPE
+    assert fake_clearer.call_args.kwargs["start_new_session"] is True
+    fake_clearer.return_value.stdin.write.assert_called_once_with(digest)
+    fake_clearer.return_value.stdin.close.assert_called_once()
 
 
 @pytest.mark.unit

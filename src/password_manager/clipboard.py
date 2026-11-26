@@ -1,5 +1,7 @@
 import hashlib
 import hmac
+import sys
+from subprocess import DEVNULL, PIPE, Popen
 
 import pyperclip
 
@@ -21,3 +23,13 @@ def clear_if_unchanged(digest):
             pyperclip.copy("")
         except pyperclip.PyperclipException:
             logger.warning("Could not clear the copied password from the clipboard.")
+
+
+# Starts the clearer for a password pm get just copied. The digest goes through a pipe, never argv
+# (/proc/<pid>/cmdline is readable by every process); the timeout is not secret. Its own session keeps it alive after
+# the terminal closes; no output, since nobody is there to read it.
+def start_clearer(password, timeout):
+    clearer = Popen([sys.executable, "-m", "password_manager.clipboard", str(timeout)], stdin=PIPE, stdout=DEVNULL,
+                    stderr=DEVNULL, text=True, start_new_session=True)
+    clearer.stdin.write(hashlib.sha256(password.encode()).hexdigest())
+    clearer.stdin.close()

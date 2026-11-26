@@ -6,7 +6,7 @@ from keyring.errors import PasswordDeleteError
 from password_manager.agent import AgentState, handle_request
 from password_manager.crypto import derive_key, wrap_data_key
 from cryptography.fernet import Fernet
-from unittest.mock import mock_open, patch
+from unittest.mock import Mock, mock_open, patch
 
 
 # Point PM_DATA_DIR at a throwaway folder before any test module imports the package
@@ -86,6 +86,16 @@ def no_real_keyring():
 @pytest.fixture(autouse=True)
 def no_process_hardening(monkeypatch):
     monkeypatch.setattr("password_manager.cli.harden_process", lambda: None)
+
+
+# pm get starts a detached process that clears the clipboard later. A real one would outlive the test and, after the
+# timeout, empty the developer's own clipboard, so every test gets a mock Popen instead; a test inspects it by asking
+# for this fixture. The integration test of the real clearer starts its own process.
+@pytest.fixture(autouse=True)
+def fake_clearer(monkeypatch):
+    popen = Mock()
+    monkeypatch.setattr("password_manager.clipboard.Popen", popen)
+    return popen
 
 
 # Helper to generate valid base64 strings
