@@ -54,3 +54,8 @@ def run_clearer(timeout, stdin):
     digest = stdin.readline().strip()
     sleep(timeout)
     clear_if_unchanged(digest)
+
+
+# Started by start_clearer() as `python -m password_manager.clipboard <timeout>`, the digest on stdin
+if __name__ == "__main__":
+    run_clearer(int(sys.argv[1]), sys.stdin)
